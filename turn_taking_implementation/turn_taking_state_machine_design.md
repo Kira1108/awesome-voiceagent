@@ -73,4 +73,18 @@
 2.  **动态阈值**：EOU 应该能根据当前对话的上下文（Context）修改 VAD 的 `min_silence_duration`。
     - 闲聊模式：1.2s（给用户留出思考时间）。
     - 指令模式：0.5s（极速响应）。
-3.  **状态追踪日志**：在日志中必须记录 `State: PENDING_EOU -> Decision: RESET by EOU_Text_Model`，否则无法排查“为什么 AI 没反应”或“为什么 AI 乱抢话”。
+3.  **状态追踪日志**：在日志中必须记录 `State: PENDING_EOU -> Decision: RESET by EOU_Text_Model`，否则无法排查"为什么 AI 没反应"或"为什么 AI 乱抢话"。推荐格式：`[时间戳] [事件类型] | 旧状态 -> 新状态 | 详情`。
+4.  **避免锁死锁 (Lock Deadlock)**：`asyncio.Lock` **不可重入**。如果 `transition()` 持锁后调用 `_on_enter_thinking()`，而后者最终又调用 `transition()`，将导致永久挂起。
+    - **规则**：锁内只做状态读写，所有副作用（启动任务、取消任务、调用外部模块）必须在锁外执行。
+    - **模式**：
+      ```python
+      async with self.lock:
+          old, self.state = self.state, new_state  # 锁内：纯状态变更
+      await self._on_enter_xxx()                   # 锁外：副作用
+      ```
+5.  **EOU 超时保护**：EOU 模型可能因网络或计算问题卡住。必须用 `asyncio.wait_for()` 包裹 EOU 调用，超时后默认走 `FINISHED` 路径进入 `THINKING`，避免状态机在 `PENDING_EOU` 永久挂起。
+6.  **任务生命周期管理**：所有通过 `asyncio.create_task()` 创建的异步任务（EOU 仲裁、LLM 推理、TTS 播放）必须：
+    - 保存引用（如 `self.pending_eou_task`），不可 fire-and-forget。
+    - 在状态转换时检查 `.done()` 并主动 `.cancel()`。
+    - 在任务内部处理 `CancelledError` 并清理资源。
+7.  **EOU 竞态防护**：用户快速"说→停→说→停"时，多个 `_arbite_eou` 任务可能并发执行。进入 `LISTENING` 态时必须取消旧的 EOU 任务，并在 EOU 任务返回时重新校验当前状态是否仍为 `PENDING_EOU`。
