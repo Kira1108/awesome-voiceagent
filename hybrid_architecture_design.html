@@ -181,8 +181,7 @@
             </ol>
 
             <h3>接口抽象伪代码</h3>
-            <div class="code-block">
-class DataFrame:
+            <pre class="code-block"><code>class DataFrame:
     turn_id: int
     payload: Union[bytes, str]
 
@@ -197,11 +196,10 @@ class BaseProcessor:
         await self.clear_buffers() # 清空当前积压的任务
 
     async def process_data(self, frame: DataFrame):
-        if frame.turn_id < self.current_turn_id:
+        if frame.turn_id &lt; self.current_turn_id:
             return # 丢弃过期数据，彻底杜绝“打断后蹦出半个字”
         
-        # ... 正常处理逻辑 ...
-            </div>
+        # ... 正常处理逻辑 ...</code></pre>
         </section>
 
         <section>
@@ -227,7 +225,43 @@ class BaseProcessor:
         </section>
 
         <section>
-            <h2>四、 架构优势总结</h2>
+            <h2>四、 核心场景剖析：Voice Agent 的三块试金石</h2>
+            <p>在真实业务中，决定一个 Voice Agent 是“玩具”还是“工业级产品”，往往取决于对以下三个核心时序事件的处理能力。我们的混合架构正是为解决这些痛点而生：</p>
+
+            <h3>1. On User Turn, No User Utterance (沉寂打捞/超时唤醒)</h3>
+            <p><strong>现象：</strong> 轮到用户说话，但用户一直沉默。</p>
+            <p><strong>大管家视角：</strong> 状态机处于 <code>LISTENING</code> 态。大管家内部维护一个 Timer，一旦超时，大管家直接触发 <code>CMD_GENERATE(prompt="检测到沉默，请给出上下文感知的唤醒语")</code>。</p>
+            <p><strong>解决难度：简单。</strong> 此时流水线处于空载状态（没有音频数据，没有 TTS 任务），大管家只需安全地将状态推向 <code>THINKING</code> ➔ <code>SPEAKING</code> 即可。</p>
+
+            <h3>2. On User Turn, User Has New Utterance (常规轮次接管)</h3>
+            <p><strong>现象：</strong> 助手说完闭嘴，用户开始正常说话。</p>
+            <p><strong>大管家视角：</strong> 状态机从 <code>IDLE/LISTENING</code> 接收到 <code>Event(VAD_STARTED)</code>，等待 <code>Event(EOU_CONFIRMED)</code>，然后大管家发出 <code>CMD_GENERATE</code> 开始新一轮对话。</p>
+            <p><strong>解决难度：简单。</strong> 这是典型的快乐路径 (Happy Path)，各组件首尾相连，数据顺序流转，无资源竞争。</p>
+
+            <div class="highlight-box" style="border-left-color: var(--accent-red); background-color: #fef2f2;">
+                <h3 style="color: var(--accent-red); margin-top: 0;">3. The Most Difficult One: User Utterance on Assistant Turn (突发打断 / Barge-in)</h3>
+                <p><strong>现象：</strong> 助手正在滔滔不绝，此时用户突然插嘴打断。</p>
+                <p><strong>核心难点：</strong> <em style="color: #7f1d1d;">"It leads to state update for many processors while the data flows continuously."</em>（在数据流持续涌动的同时，必须瞬间更新多个处理器的状态）。如果不加以控制，会导致打断延迟，甚至出现“已经打断了，但音箱里还在往外蹦旧词”的恐怖片效果。</p>
+                
+                <p><strong>本架构的终极解法：</strong></p>
+                <ol>
+                    <li><strong>数据的持续涌动：</strong> 此时流水线充满了旧轮次（如 Turn ID = 1）的残影：LLM 正在吐字，TTS 正在合成，播放器底层 Buffer 还有 500ms 待播音频。</li>
+                    <li><strong>事件的瞬间爆发：</strong> 用户开口瞬间，VAD 绕过流水线，直接向 EventBus 抛出 <code>Event(VAD_STARTED)</code>。</li>
+                    <li><strong>大管家的雷霆手段：</strong> 状态机处于 <code>SPEAKING</code>，判定打断有效。大管家立刻将全局 <code>Turn ID</code> 提升至 2，并通过总线<strong>瞬间广播</strong> <code>CMD_INTERRUPT(new_turn_id=2)</code>。</li>
+                    <li><strong>各扫门前雪的并发响应：</strong> 
+                        <ul>
+                            <li>LLM 收到广播：立即 Cancel 网络请求。</li>
+                            <li>TTS 收到广播：立即清空合成队列。</li>
+                            <li>Player 收到广播：立即 Flush 底层音频缓冲区。</li>
+                        </ul>
+                    </li>
+                    <li><strong>Turn ID 的终极兜底：</strong> 假设 LLM 的一个残影 Token "的" (Turn=1) 顺着管道流到了 TTS。TTS 发现自身已处于 Turn=2 时代，直接将过期 Token 丢弃！完美解决时序幽灵问题。</li>
+                </ol>
+            </div>
+        </section>
+
+        <section>
+            <h2>五、 架构优势总结</h2>
             <table>
                 <thead>
                     <tr>
