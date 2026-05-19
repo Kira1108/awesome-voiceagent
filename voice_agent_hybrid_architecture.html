@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>语音 AI 混合架构设计指南: Pipecat + LiveKit</title>
+    <!-- 使用 Prism.js 进行代码高亮 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f2f5;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+            border-left: 5px solid #3498db;
+            padding-left: 15px;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #3498db;
+            margin-bottom: 30px;
+            padding-bottom: 10px;
+            border-left: none;
+        }
+        .container {
+            background: #fff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .concept-box {
+            display: flex;
+            gap: 20px;
+            margin: 25px 0;
+        }
+        .concept-item {
+            flex: 1;
+            padding: 20px;
+            border-radius: 8px;
+            background: #e1f5fe;
+            border: 1px solid #b3e5fc;
+        }
+        .tag {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .tag-pipecat { background: #e67e22; color: white; }
+        .tag-livekit { background: #3498db; color: white; }
+        
+        .code-container {
+            margin: 20px 0;
+            position: relative;
+        }
+        .code-label {
+            position: absolute;
+            top: 0;
+            right: 15px;
+            background: #555;
+            color: white;
+            padding: 2px 10px;
+            font-size: 12px;
+            border-radius: 0 0 5px 5px;
+            z-index: 10;
+        }
+        .note {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>语音 AI 混合架构设计指南</h1>
+            <p><strong>Pipecat (帧流水线) + LiveKit (事件编排) 的工程化实践</strong></p>
+        </div>
+
+        <h2>1. 核心模型解析</h2>
+        <div class="concept-box">
+            <div class="concept-item">
+                <span class="tag tag-pipecat">Pipecat 模式</span>
+                <h3>优先级随流信令</h3>
+                <p>将音频数据与控制信号（如打断）统一封装为 <code>Frame</code>。利用优先级队列，让紧急信号可以在数据流中“插队”，实现毫秒级响应。</p>
+            </div>
+            <div class="concept-item">
+                <span class="tag tag-livekit">LiveKit 模式</span>
+                <h3>中心化事件总线</h3>
+                <p>通过 <code>EventBus</code> 实现组件间的解耦。组件只需关心自己的输入和输出，宏观的业务逻辑（如状态切换、打断判决）由独立的仲裁器处理。</p>
+            </div>
+        </div>
+
+        <h2>2. 混合架构代码实现 (Python)</h2>
+        <p>以下是完整的工业级组件基类与 WebSocket 输入组件实现，展示了如何同时管理<strong>异步数据流</strong>与<strong>异步控制指令</strong>。</p>
+
+        <div class="code-container">
+            <div class="code-label">voice_agent_core.py</div>
+            <pre><code class="language-python">
+import asyncio
+from enum import IntEnum
+from dataclasses import dataclass, field
+from typing import Any, Optional, Set, Callable
+
+# --- 1. 帧定义 (Pipecat 风格) ---
+
+class FramePriority(IntEnum):
+    SYSTEM = 0    # 最高优先级：立即打断、强制停止
+    CONTROL = 5   # 中优先级：开始说话、结束说话标记
+    DATA = 10     # 普通优先级：音频字节、文本 Token
+
+@dataclass(order=True)
+class Frame:
+    priority: FramePriority
+    payload: Any = field(compare=False) # payload 不参与优先级比较
+
+# --- 2. 事件总线 (LiveKit 风格) ---
+
+class EventBus:
+    def __init__(self):
+        self._subscribers: Set[Callable] = set()
+
+    def subscribe(self, callback: Callable):
+        self._subscribers.add(callback)
+
+    def emit(self, event_name: str, data: Any = None):
+        """非阻塞广播系统级事件"""
+        for cb in self._subscribers:
+            asyncio.create_task(cb(event_name, data))
+
+# --- 3. 组件基类设计 ---
+
+class PipelineComponent:
+    def __init__(self, event_bus: EventBus):
+        self.event_bus = event_bus
+        # 核心：使用优先级队列存储待处理的所有帧
+        self.input_queue = asyncio.PriorityQueue()
+        self.next: Optional['PipelineComponent'] = None
+        
+        # 自动订阅总线事件
+        self.event_bus.subscribe(self._on_bus_event)
+
+    def set_next(self, next_comp: 'PipelineComponent'):
+        self.next = next_comp
+
+    async def _on_bus_event(self, name: str, data: Any):
+        """
+        [关键逻辑] 监听总线并将全局指令转化为高优先级帧
+        """
+        if name == "USER_INTERRUPT":
+            # 立即执行副作用（如清理当前积压的音频帧）
+            await self.handle_interrupt()
+        
+        # 将指令注入流水线，确保在处理协程中被消费
+        await self.input_queue.put(Frame(FramePriority.SYSTEM, {"event": name, "data": data}))
+
+    async def handle_interrupt(self):
+        """打断时的快速清理逻辑"""
+        while not self.input_queue.empty():
+            try:
+                self.input_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        print(f"[{self.__class__.__name__}] 检测到打断，队列已重置。")
+
+    async def push_to_next(self, frame: Frame):
+        if self.next:
+            await self.next.input_queue.put(frame)
+
+# --- 4. WebSocket 输入传输层实现 ---
+
+class WebSocketAudioInputTransport(PipelineComponent):
+    def __init__(self, ws: Any, event_bus: EventBus):
+        super().__init__(event_bus)
+        self.ws = ws
+        self.running = True
+
+    async def _handle_ws_input(self):
+        """协程 A: 负责从网络摄入原始音频流 (Data Plane)"""
+        try:
+            while self.running:
+                # 阻塞式接收网络数据
+                message = await self.ws.receive()
+                if "bytes" in message:
+                    # 包装为 DATA 帧向下游传递
+                    await self.push_to_next(Frame(FramePriority.DATA, message["bytes"]))
+        except Exception as e:
+            self.event_bus.emit("TRANSPORT_ERROR", str(e))
+
+    async def _process_control_frames(self):
+        """协程 B: 负责处理流水线内的指令帧 (Control Plane)"""
+        while self.running:
+            # 这里的 get 会按照 Priority 自动排序，SYSTEM 帧会先出来
+            frame = await self.input_queue.get()
+            
+            if frame.priority == FramePriority.SYSTEM:
+                event_data = frame.payload
+                print(f"处理紧急指令: {event_data['event']}")
+                if event_data['event'] == "STOP":
+                    self.running = False
+            
+            # 标记处理完成
+            self.input_queue.task_done()
+
+    async def run(self):
+        """
+        启动双协程。在 asyncio 中，即使有几千个这样的 Task 也是轻量级的。
+        关键在于让数据处理和控制逻辑并发运行。
+        """
+        await asyncio.gather(
+            self._handle_ws_input(),
+            self._process_control_frames()
+        )
+</code></pre>
+        </div>
+
+        <h2>3. 常见疑问解答</h2>
+        <div class="note">
+            <strong>Q: 每个组件跑 2 个 Task 会不会太多？</strong><br>
+            <strong>A: 绝对不会。</strong><code>asyncio.Task</code> 是用户态协程，每个仅占用几 KB 内存。一个普通的 Python 进程可以轻松调度上万个 Task。
+            相比于性能，<strong>“隔离数据流与控制流”</strong>带来的代码清晰度和低延迟打断能力（Deterministic Interruption）价值更高。
+        </div>
+
+        <h2>4. 架构优势</h2>
+        <ul>
+            <li><strong>毫秒级打断</strong>：由于使用了 <code>PriorityQueue</code>，<code>USER_INTERRUPT</code> 帧会跳过所有积压的音频数据，第一时间被处理。</li>
+            <li><strong>解耦</strong>：WebSocket 组件不需要知道 VAD 或 TTS 的逻辑，它只负责搬运字节和响应总线指令。</li>
+            <li><strong>可观测性</strong>：通过 <code>EventBus</code>，你可以轻松接入一个监控组件，实时记录所有组件的运行状态。</li>
+        </ul>
+    </div>
+
+    <!-- Prism.js 脚本 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+</body>
+</html>
