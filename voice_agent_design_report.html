@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadence — A Conversation Runtime for Production Voice Agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;450;500;600&family=IBM+Plex+Mono:wght@400;450;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EDF0F3;        /* cool instrument gray */
+  --panel:#FFFFFF;
+  --panel-deep:#0E1524;   /* scope screen navy */
+  --ink:#141B26;
+  --ink-soft:#4A5568;
+  --line:#D4DAE1;
+  --user:#1F6FEB;         /* user signal — blue */
+  --agent:#F2542D;        /* agent signal — coral */
+  --ok:#178A5B;
+  --grid:#1C2740;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif;
+  --disp:'Space Grotesk',var(--sans);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16.5px;line-height:1.65;font-weight:450}
+::selection{background:var(--user);color:#fff}
+a{color:var(--user);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--user);outline-offset:3px;border-radius:2px}
+
+.wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+
+/* ---------- masthead ---------- */
+.mast{border-bottom:1px solid var(--line);padding:18px 0;display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
+.mast .brand{font-family:var(--disp);font-weight:700;font-size:1.05rem;letter-spacing:.02em}
+.mast .brand span{color:var(--agent)}
+.mast .meta{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft)}
+
+/* ---------- hero ---------- */
+.hero{padding:72px 0 56px}
+.eyebrow{font-family:var(--mono);font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:18px}
+.eyebrow b{color:var(--agent);font-weight:500}
+h1{font-family:var(--disp);font-weight:700;font-size:clamp(2.3rem,5.4vw,3.7rem);line-height:1.06;letter-spacing:-.02em;max-width:19ch}
+h1 .u{color:var(--user)}h1 .a{color:var(--agent)}
+.lede{margin-top:22px;max-width:62ch;font-size:1.12rem;color:var(--ink-soft)}
+.lede strong{color:var(--ink);font-weight:600}
+
+/* ---------- scope panel (signature) ---------- */
+.scope{margin:52px 0 0;background:var(--panel-deep);border-radius:10px;padding:26px 26px 18px;overflow:hidden;position:relative}
+.scope-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.scope-head .t{font-family:var(--mono);font-size:.78rem;color:#8A98B8;letter-spacing:.08em;text-transform:uppercase}
+.legend{display:flex;gap:18px;font-family:var(--mono);font-size:.75rem;color:#8A98B8}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.scope svg{width:100%;height:auto;display:block}
+.scope-caption{font-family:var(--mono);font-size:.74rem;color:#66748F;margin-top:12px;line-height:1.6}
+.scope-caption em{color:#B9C4DB;font-style:normal}
+@media (prefers-reduced-motion:no-preference){
+  .pulse{animation:dash 5.5s linear infinite}
+  @keyframes dash{to{stroke-dashoffset:-640}}
+}
+
+/* ---------- sections ---------- */
+section{padding:64px 0;border-top:1px solid var(--line)}
+.sec-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--agent);margin-bottom:14px}
+h2{font-family:var(--disp);font-weight:600;font-size:clamp(1.5rem,3vw,2.1rem);letter-spacing:-.01em;margin-bottom:18px;max-width:30ch}
+h3{font-family:var(--disp);font-weight:600;font-size:1.12rem;margin:30px 0 10px}
+p{max-width:70ch;margin-bottom:14px}
+p.dim{color:var(--ink-soft)}
+code{font-family:var(--mono);font-size:.86em;background:#E2E7EC;padding:.12em .4em;border-radius:4px}
+
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-top:26px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:22px 22px 18px}
+.card h4{font-family:var(--disp);font-weight:600;font-size:1rem;margin-bottom:8px}
+.card .k{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:10px}
+.card p{font-size:.94rem;color:var(--ink-soft);margin-bottom:0}
+.card.u{border-top:3px solid var(--user)}
+.card.a{border-top:3px solid var(--agent)}
+.card.g{border-top:3px solid var(--ok)}
+
+/* ---------- architecture stack ---------- */
+.stack{margin-top:30px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel)}
+.layer{display:grid;grid-template-columns:190px 1fr;border-bottom:1px solid var(--line)}
+.layer:last-child{border-bottom:none}
+.layer .name{padding:20px;font-family:var(--mono);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);border-right:1px solid var(--line);display:flex;align-items:center}
+.layer .body{padding:18px 22px}
+.layer .body b{font-family:var(--disp);font-weight:600;display:block;margin-bottom:4px}
+.layer .body p{font-size:.92rem;color:var(--ink-soft);margin:0;max-width:none}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{font-family:var(--mono);font-size:.72rem;padding:3px 10px;border-radius:20px;border:1px solid var(--line);color:var(--ink-soft)}
+.chip.u{border-color:var(--user);color:var(--user)}
+.chip.a{border-color:var(--agent);color:var(--agent)}
+@media(max-width:640px){.layer{grid-template-columns:1fr}.layer .name{border-right:none;border-bottom:1px dashed var(--line);padding-bottom:10px}}
+
+/* ---------- fsm ---------- */
+.fsm{background:var(--panel-deep);border-radius:10px;padding:26px;margin-top:26px}
+.fsm svg{width:100%;height:auto}
+.fsm-note{font-family:var(--mono);font-size:.74rem;color:#66748F;margin-top:10px}
+
+/* ---------- budget table ---------- */
+table{width:100%;border-collapse:collapse;margin:24px 0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:.93rem}
+th{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;text-align:left;color:var(--ink-soft);background:#F5F7F9;padding:12px 16px;border-bottom:1px solid var(--line)}
+td{padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num{font-family:var(--mono);font-size:.85rem;white-space:nowrap}
+.bar{height:6px;border-radius:3px;background:#E2E7EC;position:relative;min-width:120px;margin-top:6px}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,var(--user),var(--agent))}
+
+/* ---------- code ---------- */
+pre{background:#F7F9FC;color:#1F2937;border:1px solid var(--line);border-radius:10px;padding:22px 24px;overflow-x:auto;font-family:var(--mono);font-size:.84rem;line-height:1.7;margin:22px 0}
+pre .c{color:#6B7A90;font-style:italic}pre .k{color:#0B5CD6;font-weight:500}pre .s{color:#C2410C}pre .f{color:#0F7B54}
+
+/* ---------- comparison ---------- */
+.vs td:first-child{font-weight:600;font-family:var(--disp);font-size:.9rem}
+.vs .us{background:#FFF7F4}
+.tick{color:var(--ok);font-family:var(--mono)}
+.dash{color:#9AA5B1;font-family:var(--mono)}
+
+/* ---------- roadmap ---------- */
+.phases{margin-top:26px;display:grid;gap:0;border-left:2px solid var(--line);padding-left:0}
+.phase{position:relative;padding:0 0 30px 30px}
+.phase:last-child{padding-bottom:4px}
+.phase::before{content:'';position:absolute;left:-7px;top:6px;width:12px;height:12px;border-radius:50%;background:var(--paper);border:3px solid var(--user)}
+.phase:nth-child(2)::before{border-color:var(--agent)}
+.phase:nth-child(3)::before{border-color:var(--ok)}
+.phase .ph-t{font-family:var(--mono);font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)}
+.phase h4{font-family:var(--disp);font-weight:600;font-size:1.08rem;margin:4px 0 8px}
+.phase ul{list-style:none;font-size:.94rem;color:var(--ink-soft)}
+.phase li{padding-left:18px;position:relative;margin-bottom:5px}
+.phase li::before{content:'—';position:absolute;left:0;color:var(--agent)}
+
+/* ---------- footer ---------- */
+footer{border-top:1px solid var(--line);padding:34px 0 60px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-family:var(--mono);font-size:.76rem;color:var(--ink-soft)}
+
+@media print{
+  .scope,.fsm,pre{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  section{padding:34px 0}
+  .hero{padding:34px 0 24px}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="mast">
+    <div class="brand">CADENCE<span>_</span>RUNTIME</div>
+    <div class="meta">DESIGN SPEC · v0.1 · 2026-07 · OPEN SOURCE PROPOSAL</div>
+  </header>
+
+  <!-- ================= HERO ================= -->
+  <div class="hero">
+    <div class="eyebrow">Voice Agent Framework · <b>Design Report</b></div>
+    <h1>A conversation runtime that treats <span class="u">the user</span> and <span class="a">the agent</span> as two signals to schedule.</h1>
+    <p class="lede">LiveKit Agents perfected the <strong>worker infrastructure</strong>. Pipecat perfected the <strong>frame pipeline</strong>. Cadence proposes the missing third layer: a <strong>conversation scheduler</strong> — turn-taking, interruption, speculation, and latency budgets as first-class, testable runtime primitives, independent of any transport.</p>
+
+    <!-- signature: turn-taking scope -->
+    <div class="scope" role="img" aria-label="Timeline diagram showing user speech and agent speech on two tracks. The agent begins speculative work during user speech, the user interrupts the agent reply, and stale agent output is cancelled within 120 milliseconds.">
+      <div class="scope-head">
+        <span class="t">Session trace · turn 41 → 42 · barge-in event</span>
+        <span class="legend">
+          <span><i style="background:var(--user)"></i>USER</span>
+          <span><i style="background:var(--agent)"></i>AGENT</span>
+          <span><i style="background:#3D4C6E"></i>SPECULATIVE</span>
+        </span>
+      </div>
+      <svg viewBox="0 0 960 240" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- grid -->
+        <g stroke="#1C2740" stroke-width="1">
+          <line x1="0" y1="60" x2="960" y2="60"/><line x1="0" y1="120" x2="960" y2="120"/><line x1="0" y1="180" x2="960" y2="180"/>
+          <line x1="160" y1="20" x2="160" y2="220"/><line x1="320" y1="20" x2="320" y2="220"/><line x1="480" y1="20" x2="480" y2="220"/><line x1="640" y1="20" x2="640" y2="220"/><line x1="800" y1="20" x2="800" y2="220"/>
+        </g>
+        <!-- time labels -->
+        <g font-family="IBM Plex Mono,monospace" font-size="11" fill="#66748F">
+          <text x="8" y="36">t+0ms</text><text x="164" y="36">+800</text><text x="324" y="36">+1600</text><text x="484" y="36">+2400</text><text x="644" y="36">+3200</text><text x="804" y="36">+4000</text>
+        </g>
+        <!-- track labels -->
+        <g font-family="IBM Plex Mono,monospace" font-size="11">
+          <text x="8" y="86" fill="#5B8DEF">USER.AUDIO</text>
+          <text x="8" y="146" fill="#FF7B54">AGENT.AUDIO</text>
+          <text x="8" y="206" fill="#8A98B8">RUNTIME.EVENTS</text>
+        </g>
+        <!-- user speech waveform-ish blocks -->
+        <g fill="#1F6FEB">
+          <rect x="90" y="92" width="200" height="14" rx="7" opacity=".9"/>
+          <rect x="300" y="95" width="60" height="8" rx="4" opacity=".45"/>
+          <rect x="620" y="92" width="230" height="14" rx="7" opacity=".9"/>
+        </g>
+        <!-- speculative agent work (dim) -->
+        <rect x="240" y="152" width="130" height="10" rx="5" fill="#3D4C6E"/>
+        <!-- committed agent speech -->
+        <rect x="380" y="150" width="270" height="14" rx="7" fill="#F2542D" opacity=".92"/>
+        <!-- cancelled tail -->
+        <rect x="655" y="150" width="120" height="14" rx="7" fill="none" stroke="#F2542D" stroke-dasharray="5 5" opacity=".55"/>
+        <line x1="655" y1="142" x2="655" y2="172" stroke="#FF7B54" stroke-width="2"/>
+        <!-- animated pulse line -->
+        <path class="pulse" d="M0 210 H960" stroke="#2A3A5E" stroke-width="2" stroke-dasharray="14 18"/>
+        <!-- event markers -->
+        <g font-family="IBM Plex Mono,monospace" font-size="10.5" fill="#B9C4DB">
+          <circle cx="240" cy="210" r="4" fill="#5B8DEF"/><text x="212" y="196">eou.predicted p=.72 → speculate</text>
+          <circle cx="380" cy="210" r="4" fill="#8AE0B8"/><text x="368" y="232">turn.commit · first_audio 610ms</text>
+          <circle cx="620" cy="210" r="4" fill="#FF7B54"/><text x="560" y="196">barge_in → cancel graph (turn 41)</text>
+          <circle cx="742" cy="210" r="4" fill="#8AE0B8"/><text x="700" y="232">flushed in 118ms · turn 42 open</text>
+        </g>
+      </svg>
+      <div class="scope-caption">Every session emits this trace. The runtime <em>speculated</em> during the user's pause, <em>committed</em> when end-of-utterance confidence crossed threshold, and <em>cancelled the entire downstream graph in 118ms</em> when the user barged in. All four decisions are replayable events, not side effects buried in callbacks.</div>
+    </div>
+  </div>
+
+  <!-- ================= 1. THESIS ================= -->
+  <section id="thesis">
+    <div class="sec-label">01 · Thesis</div>
+    <h2>The hard problem is no longer moving audio. It is deciding, every 20ms, who owns the floor.</h2>
+    <p>Transport is a solved problem — WebRTC SFUs, SIP trunks, and WebSocket streams are commodity. Model quality is a vendor race you don't have to run. What remains genuinely unsolved in open source is the <strong>conversation layer</strong>: the logic that decides when the user has finished speaking, when to start responding, what to throw away on interruption, and how to hit a latency budget while doing all of it.</p>
+    <p class="dim">Today that logic lives in scattered VAD callbacks and ad-hoc task cancellation inside every team's fork. Cadence makes it the product.</p>
+    <div class="cols">
+      <div class="card u">
+        <span class="k">Borrowed from LiveKit</span>
+        <h4>Supervised session actors</h4>
+        <p>Every conversation is an isolated, supervised actor with its own lifecycle, restart policy, and resource guard — a failed tool call or provider timeout can never take down a worker.</p>
+      </div>
+      <div class="card a">
+        <span class="k">Borrowed from Pipecat</span>
+        <h4>Typed event flow</h4>
+        <p>All data — audio chunks, transcript deltas, tokens, tool calls, control signals — are typed events with turn epochs and timestamps, flowing through an explicit graph.</p>
+      </div>
+      <div class="card g">
+        <span class="k">The innovation</span>
+        <h4>Conversation scheduler</h4>
+        <p>A deterministic core that owns turn-taking, speculation, cancellation, and latency budgets — and can be replayed, unit-tested, and simulated offline like any state machine.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 2. ARCHITECTURE ================= -->
+  <section id="architecture">
+    <div class="sec-label">02 · Architecture</div>
+    <h2>Three planes, one contract: everything is a turn-stamped event.</h2>
+    <p>Cadence separates concerns into a media plane, a conversation plane, and an operations plane. The planes communicate only through typed events carrying a monotonic <code>turn_id</code> epoch — the mechanism that makes interruption race-free: any event stamped with a stale epoch is dropped at every node, so "half a word escaping after barge-in" becomes structurally impossible.</p>
+
+    <div class="stack">
+      <div class="layer">
+        <div class="name">Media Plane</div>
+        <div class="body">
+          <b>Transport adapters &amp; audio I/O</b>
+          <p>Jitter buffers, resampling, echo-cancelled capture. Transports are pluggable — LiveKit is an adapter here, not a dependency.</p>
+          <div class="chips"><span class="chip u">WebRTC / LiveKit</span><span class="chip u">SIP / Telephony</span><span class="chip u">WebSocket</span><span class="chip">Local mic (dev)</span></div>
+        </div>
+      </div>
+      <div class="layer">
+        <div class="name">Conversation Plane</div>
+        <div class="body">
+          <b>Turn coordinator + execution graph</b>
+          <p>The deterministic core: a turn-taking FSM, a DAG of processors (STT, LLM, TTS, tools, guardrails, memory) with per-edge backpressure, priority, and epoch-based cancellation, plus a speculation controller.</p>
+          <div class="chips"><span class="chip a">Turn FSM</span><span class="chip a">Speculative execution</span><span class="chip a">Latency budgets</span><span class="chip a">Epoch cancellation</span><span class="chip">Provider adapters</span></div>
+        </div>
+      </div>
+      <div class="layer">
+        <div class="name">Operations Plane</div>
+        <div class="body">
+          <b>Supervision, policy &amp; observability</b>
+          <p>Session actor supervision, autoscaling hooks, OpenTelemetry traces, the event-sourced replay log, and the policy engine (PII redaction, tool permissions, consent, tenant quotas).</p>
+          <div class="chips"><span class="chip">Actor supervisor</span><span class="chip">Replay log</span><span class="chip">OTel traces</span><span class="chip">Policy engine</span><span class="chip">Simulator</span></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>The developer surface stays small</h3>
+    <pre><code><span class="c"># An agent is a graph + a budget + policies. The runtime owns everything else.</span>
+<span class="k">agent</span> = cadence.Agent(
+    graph = STT(deepgram) >> LLM(gpt, tools=[book_meeting]) >> TTS(elevenlabs),
+    turn_policy  = SemanticEOU(min_silence=<span class="s">240ms</span>, confidence=<span class="s">0.7</span>),
+    budget       = LatencyBudget(first_audio=<span class="s">600ms</span>, fallback=LLM(small_model)),
+    speculation  = Speculate(on=<span class="f">eou.predicted</span>, commit=<span class="f">eou.confirmed</span>),
+    policies     = [RedactPII(), ToolPermissions(scope=<span class="s">"calendar:write"</span>)],
+)
+
+cadence.serve(agent, transport=LiveKitTransport(room), replay=<span class="k">True</span>)</code></pre>
+  </section>
+
+  <!-- ================= 3. TURN COORDINATOR ================= -->
+  <section id="turns">
+    <div class="sec-label">03 · Turn Coordinator</div>
+    <h2>Turn-taking as a five-state machine, not a VAD callback.</h2>
+    <p>The coordinator fuses three signals — acoustic VAD, streaming ASR stability, and a lightweight semantic end-of-utterance model — into one arbiter that owns the floor. Every transition is an event in the replay log, so "why did the agent talk over the caller at 00:41?" has a precise, inspectable answer.</p>
+
+    <div class="fsm" role="img" aria-label="State machine with five states: IDLE, LISTENING, DELIBERATING, SPEAKING, and YIELDING. Barge-in moves SPEAKING back to LISTENING through YIELDING with a cancellation of the current turn epoch.">
+      <svg viewBox="0 0 960 250" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0L10 5L0 10z" fill="#8A98B8"/>
+          </marker>
+          <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0L10 5L0 10z" fill="#FF7B54"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Mono,monospace" font-size="12" text-anchor="middle">
+          <!-- states -->
+          <g>
+            <rect x="20"  y="100" width="130" height="48" rx="24" fill="none" stroke="#3D4C6E" stroke-width="1.5"/><text x="85"  y="129" fill="#B9C4DB">IDLE</text>
+            <rect x="215" y="100" width="150" height="48" rx="24" fill="none" stroke="#5B8DEF" stroke-width="2"/><text x="290" y="129" fill="#5B8DEF">LISTENING</text>
+            <rect x="430" y="100" width="170" height="48" rx="24" fill="none" stroke="#8AE0B8" stroke-width="1.5"/><text x="515" y="129" fill="#8AE0B8">DELIBERATING</text>
+            <rect x="665" y="100" width="140" height="48" rx="24" fill="none" stroke="#FF7B54" stroke-width="2"/><text x="735" y="129" fill="#FF7B54">SPEAKING</text>
+            <rect x="430" y="190" width="170" height="44" rx="22" fill="none" stroke="#FF7B54" stroke-dasharray="5 4" stroke-width="1.5"/><text x="515" y="217" fill="#FF7B54">YIELDING</text>
+          </g>
+          <!-- forward arrows -->
+          <g stroke="#8A98B8" stroke-width="1.5" fill="none">
+            <line x1="150" y1="124" x2="212" y2="124" marker-end="url(#arr)"/>
+            <line x1="365" y1="124" x2="427" y2="124" marker-end="url(#arr)"/>
+            <line x1="600" y1="124" x2="662" y2="124" marker-end="url(#arr)"/>
+            <path d="M735 100 C735 40 290 40 290 97" marker-end="url(#arr)"/>
+          </g>
+          <!-- barge-in path -->
+          <g stroke="#FF7B54" stroke-width="1.8" fill="none">
+            <path d="M700 148 C660 185 620 205 603 210" marker-end="url(#arrA)"/>
+            <path d="M427 212 C350 205 305 175 293 152" marker-end="url(#arrA)"/>
+          </g>
+          <!-- labels -->
+          <g font-size="10.5" fill="#66748F" text-anchor="start">
+            <text x="152" y="112">vad.start</text>
+            <text x="370" y="112">eou p&gt;.7</text>
+            <text x="604" y="112">commit</text>
+            <text x="470" y="66">agent done / eou.retracted → listen</text>
+            <text x="618" y="192" fill="#FF7B54">barge_in</text>
+            <text x="318" y="188" fill="#FF7B54">flushed&lt;150ms · epoch++</text>
+          </g>
+        </g>
+      </svg>
+      <div class="fsm-note">DELIBERATING is the novel state: the graph is already running speculatively, but no audio is committed. If the user resumes speaking, retraction costs nothing audible.</div>
+    </div>
+
+    <h3>Speculative execution, made safe by epochs</h3>
+    <p>When end-of-utterance probability crosses the <em>speculation</em> threshold (but not yet the <em>commit</em> threshold), the runtime starts LLM inference on the partial transcript and pre-warms TTS. Two outcomes:</p>
+    <div class="cols">
+      <div class="card g">
+        <span class="k">EOU confirmed · ~70–80% of turns</span>
+        <h4>Speculation pays off</h4>
+        <p>First audio ships 300–500ms earlier than a strictly sequential pipeline, because inference overlapped the user's trailing silence.</p>
+      </div>
+      <div class="card a">
+        <span class="k">User resumes · the rest</span>
+        <h4>Retraction is free</h4>
+        <p>Epoch increments; every in-flight event with the old <code>turn_id</code> is dropped at each node. Cost: a few wasted tokens. Never a wrong word spoken aloud.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 4. LATENCY ================= -->
+  <section id="latency">
+    <div class="sec-label">04 · Latency Budgets</div>
+    <h2>Declare the budget. The scheduler spends it.</h2>
+    <p>Instead of hand-tuning buffer sizes, developers declare an end-to-end target such as <code>first_audio &lt; 600ms</code>. The scheduler tracks remaining budget per turn and makes runtime decisions: shrink endpointing silence, switch to the fallback model, start TTS at the first sentence boundary, or skip an optional enrichment step. Budget spend is attributed per stage in every trace.</p>
+    <table>
+      <thead><tr><th>Stage</th><th>Budget</th><th>P50 actual</th><th>Spend</th><th>Scheduler lever when over budget</th></tr></thead>
+      <tbody>
+        <tr><td>Endpointing (EOU decision)</td><td class="num">150ms</td><td class="num">128ms</td><td><div class="bar"><i style="width:22%"></i></div></td><td>Lower semantic-EOU threshold; rely on speculation</td></tr>
+        <tr><td>STT finalization</td><td class="num">80ms</td><td class="num">64ms</td><td><div class="bar"><i style="width:11%"></i></div></td><td>Accept last stable partial as final</td></tr>
+        <tr><td>LLM first token</td><td class="num">250ms</td><td class="num">231ms</td><td><div class="bar"><i style="width:39%"></i></div></td><td>Route to fallback model; trim context window</td></tr>
+        <tr><td>TTS first byte</td><td class="num">120ms</td><td class="num">96ms</td><td><div class="bar"><i style="width:16%"></i></div></td><td>Synthesize on first clause, not first sentence</td></tr>
+        <tr><td><strong>First audio (end-to-end)</strong></td><td class="num"><strong>600ms</strong></td><td class="num"><strong>519ms</strong></td><td><div class="bar"><i style="width:87%"></i></div></td><td>—</td></tr>
+      </tbody>
+    </table>
+    <p class="dim">Because speculation overlaps stages, the end-to-end P50 can beat the sum of stage budgets — the table above is from a simulated 10k-turn run of the reference graph.</p>
+  </section>
+
+  <!-- ================= 5. OBSERVABILITY ================= -->
+  <section id="replay">
+    <div class="sec-label">05 · Determinism &amp; Observability</div>
+    <h2>Every conversation is an event log you can replay in CI.</h2>
+    <p>The conversation plane is event-sourced: decisions (state transitions, speculation starts, cancellations, budget reallocations) and their inputs are appended to a compact log — raw audio optional and policy-gated. That single design choice buys three capabilities no current framework offers together:</p>
+    <div class="cols">
+      <div class="card u">
+        <span class="k">Debug</span>
+        <h4>Time-travel replay</h4>
+        <p>Load a production session log locally and step through the coordinator's decisions frame by frame. The FSM is pure, so replay is bit-exact.</p>
+      </div>
+      <div class="card a">
+        <span class="k">Test</span>
+        <h4>Regression conversations</h4>
+        <p>Pin real barge-in incidents as fixtures. CI replays them against every PR: "the agent must yield within 150ms on fixture #23" is an assertion, not a hope.</p>
+      </div>
+      <div class="card g">
+        <span class="k">Load</span>
+        <h4>Synthetic session simulator</h4>
+        <p>Run thousands of scripted callers — packet loss, mid-word interruptions, slow tools, provider 500s — before any human talks to the agent.</p>
+      </div>
+    </div>
+    <p style="margin-top:22px">Traces are standard <strong>OpenTelemetry</strong>: one span per turn, child spans per stage, with budget attribution attached — so latency dashboards work in whatever stack you already run.</p>
+  </section>
+
+  <!-- ================= 6. POLICY ================= -->
+  <section id="policy">
+    <div class="sec-label">06 · Policy Plane</div>
+    <h2>Compliance as configuration, not code review.</h2>
+    <p>Voice agents ship into regulated surfaces — telephony, healthcare, finance. Cadence centralizes the controls teams otherwise rebuild ad hoc: streaming <strong>PII redaction</strong> before transcripts leave the session actor, <strong>tool permission scopes</strong> checked at call time, <strong>recording consent</strong> gates on the replay log, per-tenant <strong>rate and spend quotas</strong>, and <strong>data-residency pinning</strong> for provider routing. Policies are declarative, versioned, and evaluated inside the conversation plane so they apply uniformly to every graph.</p>
+  </section>
+
+  <!-- ================= 7. POSITIONING ================= -->
+  <section id="positioning">
+    <div class="sec-label">07 · Positioning</div>
+    <h2>Complement the giants; own the layer they both leave open.</h2>
+    <table class="vs">
+      <thead><tr><th>Capability</th><th>LiveKit Agents</th><th>Pipecat</th><th class="us">Cadence</th></tr></thead>
+      <tbody>
+        <tr><td>WebRTC media infrastructure</td><td><span class="tick">●●●</span></td><td><span class="dash">via Daily</span></td><td class="us"><span class="dash">adapter (uses LiveKit)</span></td></tr>
+        <tr><td>Typed frame/event pipeline</td><td><span class="dash">partial</span></td><td><span class="tick">●●●</span></td><td class="us"><span class="tick">●●● + turn epochs</span></td></tr>
+        <tr><td>Turn-taking as testable FSM</td><td><span class="dash">internal</span></td><td><span class="dash">internal</span></td><td class="us"><span class="tick">first-class, replayable</span></td></tr>
+        <tr><td>Speculative execution w/ safe retraction</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td class="us"><span class="tick">core primitive</span></td></tr>
+        <tr><td>Declarative latency budgets</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td class="us"><span class="tick">core primitive</span></td></tr>
+        <tr><td>Deterministic session replay in CI</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td class="us"><span class="tick">event-sourced core</span></td></tr>
+        <tr><td>Policy plane (PII, consent, quotas)</td><td><span class="dash">cloud features</span></td><td><span class="dash">ecosystem</span></td><td class="us"><span class="tick">built-in, OSS</span></td></tr>
+      </tbody>
+    </table>
+    <p class="dim">Strategic note: do not build an SFU, and do not compete on provider-plugin count in year one. Interop with both ecosystems — a Cadence graph should be able to wrap a Pipecat processor, and deploy on LiveKit infrastructure — turns their communities into distribution.</p>
+  </section>
+
+  <!-- ================= 8. ROADMAP ================= -->
+  <section id="roadmap">
+    <div class="sec-label">08 · Roadmap</div>
+    <h2>Three releases to production credibility.</h2>
+    <div class="phases">
+      <div class="phase">
+        <div class="ph-t">Phase 1 · Weeks 1–8 · “It converses”</div>
+        <h4>Deterministic core</h4>
+        <ul>
+          <li>Python runtime: typed events, turn epochs, execution graph with backpressure + cancellation</li>
+          <li>Five-state turn coordinator (VAD + ASR stability + semantic EOU)</li>
+          <li>WebSocket + local-mic transports; 2 providers each for STT/LLM/TTS</li>
+          <li>Event log + offline replay CLI from day one</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="ph-t">Phase 2 · Weeks 9–18 · “It performs”</div>
+        <h4>Speculation &amp; budgets</h4>
+        <ul>
+          <li>Speculative execution with commit/retract; latency-budget scheduler with fallback routing</li>
+          <li>LiveKit + SIP transport adapters; session actor supervision</li>
+          <li>OpenTelemetry spans with per-stage budget attribution</li>
+          <li>Benchmark CLI: publish reproducible first-audio latency numbers vs. baselines</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="ph-t">Phase 3 · Weeks 19–30 · “It ships”</div>
+        <h4>Operations &amp; trust</h4>
+        <ul>
+          <li>Synthetic caller simulator (packet loss, barge-in storms, provider chaos)</li>
+          <li>Policy plane: PII redaction, tool scopes, consent gates, tenant quotas</li>
+          <li>Replay-fixture regression suite as a public conformance benchmark</li>
+          <li>Reference deployment: Helm chart, autoscaling guide, 1.0 stability contract</li>
+        </ul>
+      </div>
+    </div>
+    <h3>What to measure from week one</h3>
+    <p class="dim">First-audio P50/P95 · barge-in yield time P95 (&lt;150ms) · speculation hit rate · wasted-token ratio · sessions per core · replay determinism (100%). These six numbers are the project's public scoreboard — publish them in the README every release.</p>
+  </section>
+
+  <!-- ================= 9. COGNITION LAYER ================= -->
+  <section id="cognition">
+    <div class="sec-label">09 · Cognition Layer</div>
+    <h2>Two minds, one voice: a fast responder fronting a background thinker.</h2>
+    <p>A single model cannot be both instant and deep. The cognition layer splits the agent into a <strong>Responder</strong> — a small, fast conversational model that owns the floor — and a <strong>Thinker</strong> — a large reasoning model that handles tools, RAG, and multi-step planning asynchronously. The pattern is validated in production: OpenAI's realtime lineup pairs a mini speech model with a delegated reasoning model, and Salesforce's VoiceAgentRAG formalizes it as "Fast Talker / Slow Thinker" with a 75% pre-fetch hit rate and a 316× retrieval speedup for cache hits.</p>
+
+    <!-- cognition dataflow diagram -->
+    <div class="scope" role="img" aria-label="Dataflow diagram: user audio flows through STT into the Responder, which speaks through TTS. The Responder reads and writes a shared blackboard. The Thinker continuously reads the transcript, pre-fetches facts into the blackboard, and executes delegated tasks in the background.">
+      <div class="scope-head">
+        <span class="t">Cognition dataflow · responder / blackboard / thinker</span>
+        <span class="legend">
+          <span><i style="background:var(--user)"></i>FOREGROUND</span>
+          <span><i style="background:var(--agent)"></i>BACKGROUND</span>
+          <span><i style="background:#3D4C6E"></i>SHARED STATE</span>
+        </span>
+      </div>
+      <svg viewBox="0 0 960 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <marker id="arrC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0L10 5L0 10z" fill="#8A98B8"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Mono,monospace" font-size="12" text-anchor="middle">
+          <!-- foreground lane -->
+          <text x="480" y="28" fill="#5B8DEF" font-size="10.5" letter-spacing="2">FOREGROUND · &lt;500ms LOOP</text>
+          <rect x="30" y="45" width="120" height="46" rx="23" fill="none" stroke="#5B8DEF" stroke-width="1.5"/><text x="90" y="73" fill="#B9C4DB">USER / STT</text>
+          <rect x="330" y="45" width="180" height="46" rx="23" fill="none" stroke="#5B8DEF" stroke-width="2"/><text x="420" y="66" fill="#5B8DEF">RESPONDER</text><text x="420" y="82" fill="#66748F" font-size="9.5">small · fast · voices all</text>
+          <rect x="700" y="45" width="130" height="46" rx="23" fill="none" stroke="#5B8DEF" stroke-width="1.5"/><text x="765" y="73" fill="#B9C4DB">TTS / USER</text>
+          <!-- blackboard -->
+          <rect x="280" y="130" width="400" height="60" rx="8" fill="#16203A" stroke="#3D4C6E" stroke-width="1.5"/>
+          <text x="480" y="153" fill="#B9C4DB">BLACKBOARD</text>
+          <text x="480" y="172" fill="#66748F" font-size="9.5">facts (cache+TTL) · pending_tasks · spoken_claims · conclusions · turn_id</text>
+          <!-- background lane -->
+          <text x="480" y="292" fill="#FF7B54" font-size="10.5" letter-spacing="2">BACKGROUND · SECONDS-SCALE</text>
+          <rect x="330" y="215" width="180" height="46" rx="23" fill="none" stroke="#FF7B54" stroke-width="2"/><text x="420" y="236" fill="#FF7B54">THINKER</text><text x="420" y="252" fill="#66748F" font-size="9.5">big model · tools · RAG</text>
+          <rect x="640" y="215" width="180" height="46" rx="23" fill="none" stroke="#FF7B54" stroke-dasharray="5 4" stroke-width="1.5"/><text x="730" y="236" fill="#FFB38A">TOOLS / RAG / APIs</text><text x="730" y="252" fill="#66748F" font-size="9.5">effectful ops gated</text>
+          <!-- arrows -->
+          <g stroke="#8A98B8" stroke-width="1.5" fill="none">
+            <line x1="150" y1="68" x2="327" y2="68" marker-end="url(#arrC)"/>
+            <line x1="510" y1="68" x2="697" y2="68" marker-end="url(#arrC)"/>
+            <line x1="390" y1="91" x2="390" y2="127" marker-end="url(#arrC)"/>
+            <line x1="450" y1="127" x2="450" y2="91" marker-end="url(#arrC)"/>
+            <line x1="420" y1="212" x2="420" y2="193" marker-end="url(#arrC)"/>
+            <line x1="480" y1="193" x2="480" y2="212" marker-end="url(#arrC)"/>
+            <line x1="510" y1="238" x2="637" y2="238" marker-end="url(#arrC)"/>
+          </g>
+          <!-- transcript tap -->
+          <path d="M90 91 C90 238 200 238 327 238" stroke="#FF7B54" stroke-width="1.5" fill="none" stroke-dasharray="6 5" marker-end="url(#arrC)"/>
+          <g font-size="9.5" fill="#66748F" text-anchor="start">
+            <text x="356" y="112">read/write</text>
+            <text x="488" y="207">prefetch + results</text>
+            <text x="120" y="180" fill="#FF7B54">live transcript tap → predictive pre-thinking</text>
+          </g>
+        </g>
+      </svg>
+      <div class="scope-caption">The Thinker never speaks and the Responder never fetches. They meet only at the <em>blackboard</em> — a versioned, turn-epoch-stamped session state. Because every entry carries a <em>turn_id</em>, a barge-in invalidates stale thinking with the same epoch mechanism that cancels stale audio.</div>
+    </div>
+
+    <h3>Cache-first, not delegate-first</h3>
+    <p>On-demand delegation is the fallback path, not the primary one. The Thinker continuously reads the live transcript, predicts the next two or three likely information needs, and pre-fetches answers into the blackboard's semantic cache before the user finishes asking. The Responder answers most turns from state it already holds — delegation happens only on a cache miss.</p>
+
+    <table>
+      <thead><tr><th>Tier</th><th>Path</th><th>Latency</th><th>Handles</th></tr></thead>
+      <tbody>
+        <tr><td><strong>T0 · Reflex</strong></td><td>Responder alone</td><td class="num">&lt;300ms</td><td>Acknowledgments, small talk, confirmations, turn management</td></tr>
+        <tr><td><strong>T1 · Cache hit</strong></td><td>Responder + blackboard read</td><td class="num">&lt;500ms</td><td>Facts the Thinker pre-fetched — the common case (target ≥70% hit rate)</td></tr>
+        <tr><td><strong>T2 · Deferred</strong></td><td>Delegate → time-bridge → re-enter</td><td class="num">1–10s</td><td>Cache misses, effectful tools, novel multi-step reasoning</td></tr>
+      </tbody>
+    </table>
+
+    <h3>The delegation contract</h3>
+    <p>The Responder emits structured intents, never free-text hopes. The runtime — not the model — routes them. A hard denylist defines what the Responder must never answer from its own weights: prices, policy terms, account facts, medical claims. Those either come from the blackboard with provenance, or get delegated.</p>
+
+    <pre><code><span class="c"># Responder output is constrained: speak, delegate, or both.</span>
+<span class="k">class</span> ResponderTurn:
+    utterance: <span class="f">str</span>                      <span class="c"># what to say now (may be a bridge)</span>
+    delegations: list[<span class="f">Delegate</span>]        <span class="c"># tasks for the Thinker</span>
+
+<span class="k">class</span> Delegate:
+    kind: <span class="s">"rag" | "tool" | "reason"</span>
+    query: <span class="f">str</span>
+    urgency: <span class="s">"blocking" | "background"</span>
+    effectful: <span class="f">bool</span>                    <span class="c"># True → requires confirm gate before execution</span>
+
+<span class="c"># Thinker output is structured — it never produces prose for the user.</span>
+<span class="k">class</span> Conclusion:
+    task_id: <span class="f">str</span>
+    turn_id: <span class="f">int</span>                       <span class="c"># stale epochs dropped on arrival</span>
+    answer: <span class="f">dict</span>                       <span class="c"># structured facts + provenance</span>
+    speakable: <span class="f">str</span>                     <span class="c"># one-line summary the Responder may voice</span>
+    confidence: <span class="f">float</span></code></pre>
+
+    <h3>Time-bridging: what the user hears while the Thinker works</h3>
+    <div class="cols">
+      <div class="card u">
+        <span class="k">&lt; 800ms remaining</span>
+        <h4>Silence</h4>
+        <p>A natural pause. No filler — humans don't narrate sub-second waits, and neither should the agent.</p>
+      </div>
+      <div class="card a">
+        <span class="k">0.8 – 3s</span>
+        <h4>Contextual acknowledgment</h4>
+        <p>"Let me pull up your order" — sampled from a varied, context-conditioned set, never a looped stock phrase. Streamed partial facts may be voiced as they land.</p>
+      </div>
+      <div class="card g">
+        <span class="k">&gt; 3s</span>
+        <h4>Parallel thread + re-entry</h4>
+        <p>The Responder advances the conversation on another useful thread (verify details, collect the next slot) and re-enters when the conclusion lands: "Okay — about that refund…". Filler budget: two, then be honest about the delay.</p>
+      </div>
+    </div>
+
+    <h3>Consistency rules</h3>
+    <p>Async results arriving mid-conversation create two hazards the runtime must own:</p>
+    <div class="cols">
+      <div class="card a">
+        <span class="k">Hazard 1 · Contradiction</span>
+        <h4>Spoken-claims audit</h4>
+        <p>Every factual utterance the Responder voices is logged to <code>spoken_claims</code>. When a Thinker conclusion contradicts a prior claim, the runtime flags it and the Responder must issue a spoken correction on its next turn — confabulation gets caught, not buried.</p>
+      </div>
+      <div class="card u">
+        <span class="k">Hazard 2 · Stale work</span>
+        <h4>Epoch-scoped tasks</h4>
+        <p>Thinker tasks carry the <code>turn_id</code> they were born in. On barge-in or topic change, pure tasks (RAG lookups) are cancelled or demoted to background facts; <strong>effectful tasks are never auto-cancelled</strong> — side effects execute only after an explicit confirm gate.</p>
+      </div>
+    </div>
+
+    <h3>What to measure</h3>
+    <p class="dim">Cache hit rate (target ≥70%) · T0/T1/T2 turn distribution · bridge-to-conclusion latency P95 · correction rate (contradictions per 100 turns) · wasted pre-fetch ratio. These join the runtime scoreboard from §08.</p>
+    <p class="dim">Prior art: OpenAI gpt-realtime + reasoning-model delegation (<a href="https://developers.openai.com/api/docs/guides/realtime">realtime guide</a>) · Salesforce VoiceAgentRAG, arXiv:2603.02206 (<a href="https://github.com/SalesforceAIResearch/VoiceAgentRAG">OSS implementation</a>) · System 1 / System 2 cascades (ElevenLabs, Coval engineering posts).</p>
+  </section>
+
+  <footer>
+    <span>CADENCE_RUNTIME · design spec v0.1 · prepared for the awesome-voiceagent initiative</span>
+    <span>references: livekit/agents · pipecat-ai/pipecat</span>
+  </footer>
+</div>
+</body>
+</html>
