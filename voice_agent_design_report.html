@@ -455,6 +455,137 @@ cadence.serve(agent, transport=LiveKitTransport(room), replay=<span class="k">Tr
     <p class="dim">First-audio P50/P95 · barge-in yield time P95 (&lt;150ms) · speculation hit rate · wasted-token ratio · sessions per core · replay determinism (100%). These six numbers are the project's public scoreboard — publish them in the README every release.</p>
   </section>
 
+  <!-- ================= 9. COGNITION LAYER ================= -->
+  <section id="cognition">
+    <div class="sec-label">09 · Cognition Layer</div>
+    <h2>Two minds, one voice: a fast responder fronting a background thinker.</h2>
+    <p>A single model cannot be both instant and deep. The cognition layer splits the agent into a <strong>Responder</strong> — a small, fast conversational model that owns the floor — and a <strong>Thinker</strong> — a large reasoning model that handles tools, RAG, and multi-step planning asynchronously. The pattern is validated in production: OpenAI's realtime lineup pairs a mini speech model with a delegated reasoning model, and Salesforce's VoiceAgentRAG formalizes it as "Fast Talker / Slow Thinker" with a 75% pre-fetch hit rate and a 316× retrieval speedup for cache hits.</p>
+
+    <!-- cognition dataflow diagram -->
+    <div class="scope" role="img" aria-label="Dataflow diagram: user audio flows through STT into the Responder, which speaks through TTS. The Responder reads and writes a shared blackboard. The Thinker continuously reads the transcript, pre-fetches facts into the blackboard, and executes delegated tasks in the background.">
+      <div class="scope-head">
+        <span class="t">Cognition dataflow · responder / blackboard / thinker</span>
+        <span class="legend">
+          <span><i style="background:var(--user)"></i>FOREGROUND</span>
+          <span><i style="background:var(--agent)"></i>BACKGROUND</span>
+          <span><i style="background:#3D4C6E"></i>SHARED STATE</span>
+        </span>
+      </div>
+      <svg viewBox="0 0 960 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <marker id="arrC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0L10 5L0 10z" fill="#8A98B8"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Mono,monospace" font-size="12" text-anchor="middle">
+          <!-- foreground lane -->
+          <text x="480" y="28" fill="#5B8DEF" font-size="10.5" letter-spacing="2">FOREGROUND · &lt;500ms LOOP</text>
+          <rect x="30" y="45" width="120" height="46" rx="23" fill="none" stroke="#5B8DEF" stroke-width="1.5"/><text x="90" y="73" fill="#B9C4DB">USER / STT</text>
+          <rect x="330" y="45" width="180" height="46" rx="23" fill="none" stroke="#5B8DEF" stroke-width="2"/><text x="420" y="66" fill="#5B8DEF">RESPONDER</text><text x="420" y="82" fill="#66748F" font-size="9.5">small · fast · voices all</text>
+          <rect x="700" y="45" width="130" height="46" rx="23" fill="none" stroke="#5B8DEF" stroke-width="1.5"/><text x="765" y="73" fill="#B9C4DB">TTS / USER</text>
+          <!-- blackboard -->
+          <rect x="280" y="130" width="400" height="60" rx="8" fill="#16203A" stroke="#3D4C6E" stroke-width="1.5"/>
+          <text x="480" y="153" fill="#B9C4DB">BLACKBOARD</text>
+          <text x="480" y="172" fill="#66748F" font-size="9.5">facts (cache+TTL) · pending_tasks · spoken_claims · conclusions · turn_id</text>
+          <!-- background lane -->
+          <text x="480" y="292" fill="#FF7B54" font-size="10.5" letter-spacing="2">BACKGROUND · SECONDS-SCALE</text>
+          <rect x="330" y="215" width="180" height="46" rx="23" fill="none" stroke="#FF7B54" stroke-width="2"/><text x="420" y="236" fill="#FF7B54">THINKER</text><text x="420" y="252" fill="#66748F" font-size="9.5">big model · tools · RAG</text>
+          <rect x="640" y="215" width="180" height="46" rx="23" fill="none" stroke="#FF7B54" stroke-dasharray="5 4" stroke-width="1.5"/><text x="730" y="236" fill="#FFB38A">TOOLS / RAG / APIs</text><text x="730" y="252" fill="#66748F" font-size="9.5">effectful ops gated</text>
+          <!-- arrows -->
+          <g stroke="#8A98B8" stroke-width="1.5" fill="none">
+            <line x1="150" y1="68" x2="327" y2="68" marker-end="url(#arrC)"/>
+            <line x1="510" y1="68" x2="697" y2="68" marker-end="url(#arrC)"/>
+            <line x1="390" y1="91" x2="390" y2="127" marker-end="url(#arrC)"/>
+            <line x1="450" y1="127" x2="450" y2="91" marker-end="url(#arrC)"/>
+            <line x1="420" y1="212" x2="420" y2="193" marker-end="url(#arrC)"/>
+            <line x1="480" y1="193" x2="480" y2="212" marker-end="url(#arrC)"/>
+            <line x1="510" y1="238" x2="637" y2="238" marker-end="url(#arrC)"/>
+          </g>
+          <!-- transcript tap -->
+          <path d="M90 91 C90 238 200 238 327 238" stroke="#FF7B54" stroke-width="1.5" fill="none" stroke-dasharray="6 5" marker-end="url(#arrC)"/>
+          <g font-size="9.5" fill="#66748F" text-anchor="start">
+            <text x="356" y="112">read/write</text>
+            <text x="488" y="207">prefetch + results</text>
+            <text x="120" y="180" fill="#FF7B54">live transcript tap → predictive pre-thinking</text>
+          </g>
+        </g>
+      </svg>
+      <div class="scope-caption">The Thinker never speaks and the Responder never fetches. They meet only at the <em>blackboard</em> — a versioned, turn-epoch-stamped session state. Because every entry carries a <em>turn_id</em>, a barge-in invalidates stale thinking with the same epoch mechanism that cancels stale audio.</div>
+    </div>
+
+    <h3>Cache-first, not delegate-first</h3>
+    <p>On-demand delegation is the fallback path, not the primary one. The Thinker continuously reads the live transcript, predicts the next two or three likely information needs, and pre-fetches answers into the blackboard's semantic cache before the user finishes asking. The Responder answers most turns from state it already holds — delegation happens only on a cache miss.</p>
+
+    <table>
+      <thead><tr><th>Tier</th><th>Path</th><th>Latency</th><th>Handles</th></tr></thead>
+      <tbody>
+        <tr><td><strong>T0 · Reflex</strong></td><td>Responder alone</td><td class="num">&lt;300ms</td><td>Acknowledgments, small talk, confirmations, turn management</td></tr>
+        <tr><td><strong>T1 · Cache hit</strong></td><td>Responder + blackboard read</td><td class="num">&lt;500ms</td><td>Facts the Thinker pre-fetched — the common case (target ≥70% hit rate)</td></tr>
+        <tr><td><strong>T2 · Deferred</strong></td><td>Delegate → time-bridge → re-enter</td><td class="num">1–10s</td><td>Cache misses, effectful tools, novel multi-step reasoning</td></tr>
+      </tbody>
+    </table>
+
+    <h3>The delegation contract</h3>
+    <p>The Responder emits structured intents, never free-text hopes. The runtime — not the model — routes them. A hard denylist defines what the Responder must never answer from its own weights: prices, policy terms, account facts, medical claims. Those either come from the blackboard with provenance, or get delegated.</p>
+
+    <pre><code><span class="c"># Responder output is constrained: speak, delegate, or both.</span>
+<span class="k">class</span> ResponderTurn:
+    utterance: <span class="f">str</span>                      <span class="c"># what to say now (may be a bridge)</span>
+    delegations: list[<span class="f">Delegate</span>]        <span class="c"># tasks for the Thinker</span>
+
+<span class="k">class</span> Delegate:
+    kind: <span class="s">"rag" | "tool" | "reason"</span>
+    query: <span class="f">str</span>
+    urgency: <span class="s">"blocking" | "background"</span>
+    effectful: <span class="f">bool</span>                    <span class="c"># True → requires confirm gate before execution</span>
+
+<span class="c"># Thinker output is structured — it never produces prose for the user.</span>
+<span class="k">class</span> Conclusion:
+    task_id: <span class="f">str</span>
+    turn_id: <span class="f">int</span>                       <span class="c"># stale epochs dropped on arrival</span>
+    answer: <span class="f">dict</span>                       <span class="c"># structured facts + provenance</span>
+    speakable: <span class="f">str</span>                     <span class="c"># one-line summary the Responder may voice</span>
+    confidence: <span class="f">float</span></code></pre>
+
+    <h3>Time-bridging: what the user hears while the Thinker works</h3>
+    <div class="cols">
+      <div class="card u">
+        <span class="k">&lt; 800ms remaining</span>
+        <h4>Silence</h4>
+        <p>A natural pause. No filler — humans don't narrate sub-second waits, and neither should the agent.</p>
+      </div>
+      <div class="card a">
+        <span class="k">0.8 – 3s</span>
+        <h4>Contextual acknowledgment</h4>
+        <p>"Let me pull up your order" — sampled from a varied, context-conditioned set, never a looped stock phrase. Streamed partial facts may be voiced as they land.</p>
+      </div>
+      <div class="card g">
+        <span class="k">&gt; 3s</span>
+        <h4>Parallel thread + re-entry</h4>
+        <p>The Responder advances the conversation on another useful thread (verify details, collect the next slot) and re-enters when the conclusion lands: "Okay — about that refund…". Filler budget: two, then be honest about the delay.</p>
+      </div>
+    </div>
+
+    <h3>Consistency rules</h3>
+    <p>Async results arriving mid-conversation create two hazards the runtime must own:</p>
+    <div class="cols">
+      <div class="card a">
+        <span class="k">Hazard 1 · Contradiction</span>
+        <h4>Spoken-claims audit</h4>
+        <p>Every factual utterance the Responder voices is logged to <code>spoken_claims</code>. When a Thinker conclusion contradicts a prior claim, the runtime flags it and the Responder must issue a spoken correction on its next turn — confabulation gets caught, not buried.</p>
+      </div>
+      <div class="card u">
+        <span class="k">Hazard 2 · Stale work</span>
+        <h4>Epoch-scoped tasks</h4>
+        <p>Thinker tasks carry the <code>turn_id</code> they were born in. On barge-in or topic change, pure tasks (RAG lookups) are cancelled or demoted to background facts; <strong>effectful tasks are never auto-cancelled</strong> — side effects execute only after an explicit confirm gate.</p>
+      </div>
+    </div>
+
+    <h3>What to measure</h3>
+    <p class="dim">Cache hit rate (target ≥70%) · T0/T1/T2 turn distribution · bridge-to-conclusion latency P95 · correction rate (contradictions per 100 turns) · wasted pre-fetch ratio. These join the runtime scoreboard from §08.</p>
+    <p class="dim">Prior art: OpenAI gpt-realtime + reasoning-model delegation (<a href="https://developers.openai.com/api/docs/guides/realtime">realtime guide</a>) · Salesforce VoiceAgentRAG, arXiv:2603.02206 (<a href="https://github.com/SalesforceAIResearch/VoiceAgentRAG">OSS implementation</a>) · System 1 / System 2 cascades (ElevenLabs, Coval engineering posts).</p>
+  </section>
+
   <footer>
     <span>CADENCE_RUNTIME · design spec v0.1 · prepared for the awesome-voiceagent initiative</span>
     <span>references: livekit/agents · pipecat-ai/pipecat</span>
