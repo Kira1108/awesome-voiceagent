@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadence — 面向生产级语音智能体的对话运行时</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;450;500;600&family=IBM+Plex+Mono:wght@400;450;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EDF0F3;        /* cool instrument gray */
+  --panel:#FFFFFF;
+  --panel-deep:#0E1524;   /* scope screen navy */
+  --ink:#141B26;
+  --ink-soft:#4A5568;
+  --line:#D4DAE1;
+  --user:#1F6FEB;         /* user signal — blue */
+  --agent:#F2542D;        /* agent signal — coral */
+  --ok:#178A5B;
+  --grid:#1C2740;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'IBM Plex Sans','Noto Sans SC',-apple-system,'Segoe UI',sans-serif;
+  --disp:'Space Grotesk','Noto Sans SC',var(--sans);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16.5px;line-height:1.75;font-weight:450}
+::selection{background:var(--user);color:#fff}
+a{color:var(--user);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--user);outline-offset:3px;border-radius:2px}
+
+.wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+
+/* ---------- masthead ---------- */
+.mast{border-bottom:1px solid var(--line);padding:18px 0;display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
+.mast .brand{font-family:var(--disp);font-weight:700;font-size:1.05rem;letter-spacing:.02em}
+.mast .brand span{color:var(--agent)}
+.mast .meta{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft)}
+
+/* ---------- hero ---------- */
+.hero{padding:72px 0 56px}
+.eyebrow{font-family:var(--mono);font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:18px}
+.eyebrow b{color:var(--agent);font-weight:500}
+h1{font-family:var(--disp);font-weight:700;font-size:clamp(2.1rem,5vw,3.3rem);line-height:1.22;letter-spacing:-.01em;max-width:24ch}
+h1 .u{color:var(--user)}h1 .a{color:var(--agent)}
+.lede{margin-top:22px;max-width:62ch;font-size:1.12rem;color:var(--ink-soft)}
+.lede strong{color:var(--ink);font-weight:600}
+
+/* ---------- scope panel (signature) ---------- */
+.scope{margin:52px 0 0;background:var(--panel-deep);border-radius:10px;padding:26px 26px 18px;overflow:hidden;position:relative}
+.scope-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.scope-head .t{font-family:var(--mono);font-size:.78rem;color:#8A98B8;letter-spacing:.08em;text-transform:uppercase}
+.legend{display:flex;gap:18px;font-family:var(--mono);font-size:.75rem;color:#8A98B8}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.scope svg{width:100%;height:auto;display:block}
+.scope-caption{font-family:var(--mono);font-size:.78rem;color:#66748F;margin-top:12px;line-height:1.8}
+.scope-caption em{color:#B9C4DB;font-style:normal}
+@media (prefers-reduced-motion:no-preference){
+  .pulse{animation:dash 5.5s linear infinite}
+  @keyframes dash{to{stroke-dashoffset:-640}}
+}
+
+/* ---------- sections ---------- */
+section{padding:64px 0;border-top:1px solid var(--line)}
+.sec-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--agent);margin-bottom:14px}
+h2{font-family:var(--disp);font-weight:600;font-size:clamp(1.4rem,2.8vw,1.9rem);letter-spacing:-.01em;margin-bottom:18px;max-width:36ch}
+h3{font-family:var(--disp);font-weight:600;font-size:1.12rem;margin:30px 0 10px}
+p{max-width:74ch;margin-bottom:14px}
+p.dim{color:var(--ink-soft)}
+code{font-family:var(--mono);font-size:.86em;background:#E2E7EC;padding:.12em .4em;border-radius:4px}
+
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-top:26px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:22px 22px 18px}
+.card h4{font-family:var(--disp);font-weight:600;font-size:1rem;margin-bottom:8px}
+.card .k{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:10px}
+.card p{font-size:.94rem;color:var(--ink-soft);margin-bottom:0}
+.card.u{border-top:3px solid var(--user)}
+.card.a{border-top:3px solid var(--agent)}
+.card.g{border-top:3px solid var(--ok)}
+
+/* ---------- architecture stack ---------- */
+.stack{margin-top:30px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel)}
+.layer{display:grid;grid-template-columns:190px 1fr;border-bottom:1px solid var(--line)}
+.layer:last-child{border-bottom:none}
+.layer .name{padding:20px;font-family:var(--mono);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);border-right:1px solid var(--line);display:flex;align-items:center}
+.layer .body{padding:18px 22px}
+.layer .body b{font-family:var(--disp);font-weight:600;display:block;margin-bottom:4px}
+.layer .body p{font-size:.92rem;color:var(--ink-soft);margin:0;max-width:none}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{font-family:var(--mono);font-size:.72rem;padding:3px 10px;border-radius:20px;border:1px solid var(--line);color:var(--ink-soft)}
+.chip.u{border-color:var(--user);color:var(--user)}
+.chip.a{border-color:var(--agent);color:var(--agent)}
+@media(max-width:640px){.layer{grid-template-columns:1fr}.layer .name{border-right:none;border-bottom:1px dashed var(--line);padding-bottom:10px}}
+
+/* ---------- fsm ---------- */
+.fsm{background:var(--panel-deep);border-radius:10px;padding:26px;margin-top:26px}
+.fsm svg{width:100%;height:auto}
+.fsm-note{font-family:var(--mono);font-size:.78rem;color:#66748F;margin-top:10px;line-height:1.8}
+
+/* ---------- budget table ---------- */
+table{width:100%;border-collapse:collapse;margin:24px 0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:.93rem}
+th{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;text-align:left;color:var(--ink-soft);background:#F5F7F9;padding:12px 16px;border-bottom:1px solid var(--line)}
+td{padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num{font-family:var(--mono);font-size:.85rem;white-space:nowrap}
+.bar{height:6px;border-radius:3px;background:#E2E7EC;position:relative;min-width:120px;margin-top:6px}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,var(--user),var(--agent))}
+
+/* ---------- code ---------- */
+pre{background:#F7F9FC;color:#1F2937;border:1px solid var(--line);border-radius:10px;padding:22px 24px;overflow-x:auto;font-family:var(--mono);font-size:.84rem;line-height:1.7;margin:22px 0}
+pre .c{color:#6B7A90;font-style:italic}pre .k{color:#0B5CD6;font-weight:500}pre .s{color:#C2410C}pre .f{color:#0F7B54}
+
+/* ---------- comparison ---------- */
+.vs td:first-child{font-weight:600;font-family:var(--disp);font-size:.9rem}
+.vs .us{background:#FFF7F4}
+.tick{color:var(--ok);font-family:var(--mono)}
+.dash{color:#9AA5B1;font-family:var(--mono)}
+
+/* ---------- roadmap ---------- */
+.phases{margin-top:26px;display:grid;gap:0;border-left:2px solid var(--line);padding-left:0}
+.phase{position:relative;padding:0 0 30px 30px}
+.phase:last-child{padding-bottom:4px}
+.phase::before{content:'';position:absolute;left:-7px;top:6px;width:12px;height:12px;border-radius:50%;background:var(--paper);border:3px solid var(--user)}
+.phase:nth-child(2)::before{border-color:var(--agent)}
+.phase:nth-child(3)::before{border-color:var(--ok)}
+.phase .ph-t{font-family:var(--mono);font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)}
+.phase h4{font-family:var(--disp);font-weight:600;font-size:1.08rem;margin:4px 0 8px}
+.phase ul{list-style:none;font-size:.94rem;color:var(--ink-soft)}
+.phase li{padding-left:18px;position:relative;margin-bottom:5px}
+.phase li::before{content:'—';position:absolute;left:0;color:var(--agent)}
+
+/* ---------- footer ---------- */
+footer{border-top:1px solid var(--line);padding:34px 0 60px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-family:var(--mono);font-size:.76rem;color:var(--ink-soft)}
+
+@media print{
+  .scope,.fsm,pre{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  section{padding:34px 0}
+  .hero{padding:34px 0 24px}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="mast">
+    <div class="brand">CADENCE<span>_</span>RUNTIME</div>
+    <div class="meta">设计规格书 · v0.1 · 2026-07 · 开源项目提案</div>
+  </header>
+
+  <!-- ================= HERO ================= -->
+  <div class="hero">
+    <div class="eyebrow">语音智能体框架 · <b>设计报告</b></div>
+    <h1>一个把<span class="u">用户</span>和<span class="a">智能体</span>视为两路待调度信号的对话运行时。</h1>
+    <p class="lede">LiveKit Agents 打磨出了极致的<strong>工作进程基础设施</strong>，Pipecat 打磨出了极致的<strong>帧式流水线</strong>。Cadence 提出两者都缺失的第三层：一个<strong>对话调度器</strong> —— 将话轮切换、打断、投机执行与延迟预算作为一等公民、可测试的运行时原语，并与任何传输层解耦。</p>
+
+    <!-- signature: turn-taking scope -->
+    <div class="scope" role="img" aria-label="时间轴示意图：用户语音与智能体语音分列两条轨道。智能体在用户说话期间启动投机计算，用户随后打断智能体回复，过期的智能体输出在 120 毫秒内被取消。">
+      <div class="scope-head">
+        <span class="t">Session trace · turn 41 → 42 · barge-in event</span>
+        <span class="legend">
+          <span><i style="background:var(--user)"></i>USER</span>
+          <span><i style="background:var(--agent)"></i>AGENT</span>
+          <span><i style="background:#3D4C6E"></i>SPECULATIVE</span>
+        </span>
+      </div>
+      <svg viewBox="0 0 960 240" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- grid -->
+        <g stroke="#1C2740" stroke-width="1">
+          <line x1="0" y1="60" x2="960" y2="60"/><line x1="0" y1="120" x2="960" y2="120"/><line x1="0" y1="180" x2="960" y2="180"/>
+          <line x1="160" y1="20" x2="160" y2="220"/><line x1="320" y1="20" x2="320" y2="220"/><line x1="480" y1="20" x2="480" y2="220"/><line x1="640" y1="20" x2="640" y2="220"/><line x1="800" y1="20" x2="800" y2="220"/>
+        </g>
+        <!-- time labels -->
+        <g font-family="IBM Plex Mono,monospace" font-size="11" fill="#66748F">
+          <text x="8" y="36">t+0ms</text><text x="164" y="36">+800</text><text x="324" y="36">+1600</text><text x="484" y="36">+2400</text><text x="644" y="36">+3200</text><text x="804" y="36">+4000</text>
+        </g>
+        <!-- track labels -->
+        <g font-family="IBM Plex Mono,monospace" font-size="11">
+          <text x="8" y="86" fill="#5B8DEF">USER.AUDIO</text>
+          <text x="8" y="146" fill="#FF7B54">AGENT.AUDIO</text>
+          <text x="8" y="206" fill="#8A98B8">RUNTIME.EVENTS</text>
+        </g>
+        <!-- user speech waveform-ish blocks -->
+        <g fill="#1F6FEB">
+          <rect x="90" y="92" width="200" height="14" rx="7" opacity=".9"/>
+          <rect x="300" y="95" width="60" height="8" rx="4" opacity=".45"/>
+          <rect x="620" y="92" width="230" height="14" rx="7" opacity=".9"/>
+        </g>
+        <!-- speculative agent work (dim) -->
+        <rect x="240" y="152" width="130" height="10" rx="5" fill="#3D4C6E"/>
+        <!-- committed agent speech -->
+        <rect x="380" y="150" width="270" height="14" rx="7" fill="#F2542D" opacity=".92"/>
+        <!-- cancelled tail -->
+        <rect x="655" y="150" width="120" height="14" rx="7" fill="none" stroke="#F2542D" stroke-dasharray="5 5" opacity=".55"/>
+        <line x1="655" y1="142" x2="655" y2="172" stroke="#FF7B54" stroke-width="2"/>
+        <!-- animated pulse line -->
+        <path class="pulse" d="M0 210 H960" stroke="#2A3A5E" stroke-width="2" stroke-dasharray="14 18"/>
+        <!-- event markers -->
+        <g font-family="IBM Plex Mono,monospace" font-size="10.5" fill="#B9C4DB">
+          <circle cx="240" cy="210" r="4" fill="#5B8DEF"/><text x="212" y="196">eou.predicted p=.72 → speculate</text>
+          <circle cx="380" cy="210" r="4" fill="#8AE0B8"/><text x="368" y="232">turn.commit · first_audio 610ms</text>
+          <circle cx="620" cy="210" r="4" fill="#FF7B54"/><text x="560" y="196">barge_in → cancel graph (turn 41)</text>
+          <circle cx="742" cy="210" r="4" fill="#8AE0B8"/><text x="700" y="232">flushed in 118ms · turn 42 open</text>
+        </g>
+      </svg>
+      <div class="scope-caption">每个会话都会产生这样一条轨迹。运行时在用户停顿期间进行了<em>投机计算</em>，在句尾（EOU）置信度越过阈值时<em>提交</em>输出，并在用户抢话时<em>于 118ms 内取消了整个下游执行图</em>。这四个决策全部是可回放的事件，而不是埋在回调里的副作用。</div>
+    </div>
+  </div>
+
+  <!-- ================= 1. THESIS ================= -->
+  <section id="thesis">
+    <div class="sec-label">01 · 核心论点</div>
+    <h2>难题早已不是搬运音频，而是每 20ms 判定一次：话语权归谁。</h2>
+    <p>传输层是已解决的问题 —— WebRTC SFU、SIP 中继、WebSocket 流都已商品化。模型质量是厂商之间的军备竞赛，你不必亲自下场。开源世界里真正悬而未决的，是<strong>对话层</strong>：判断用户何时说完、何时开始回应、被打断时该丢弃什么、以及在做这一切的同时如何守住延迟预算的那套逻辑。</p>
+    <p class="dim">今天，这套逻辑散落在各团队自己 fork 出来的 VAD 回调和临时任务取消代码里。Cadence 把它变成产品本身。</p>
+    <div class="cols">
+      <div class="card u">
+        <span class="k">借鉴自 LiveKit</span>
+        <h4>受监督的会话 Actor</h4>
+        <p>每个对话都是一个隔离的、受监督的 Actor，拥有独立的生命周期、重启策略和资源守护 —— 一次失败的工具调用或供应商超时，永远不可能拖垮整个 Worker。</p>
+      </div>
+      <div class="card a">
+        <span class="k">借鉴自 Pipecat</span>
+        <h4>类型化事件流</h4>
+        <p>所有数据 —— 音频块、转写增量、Token、工具调用、控制信号 —— 都是带话轮纪元（turn epoch）和时间戳的类型化事件，在一张显式的图中流动。</p>
+      </div>
+      <div class="card g">
+        <span class="k">真正的创新</span>
+        <h4>对话调度器</h4>
+        <p>一个确定性内核，全权负责话轮切换、投机执行、取消和延迟预算 —— 并且可以像任何状态机一样被回放、单元测试和离线仿真。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 2. ARCHITECTURE ================= -->
+  <section id="architecture">
+    <div class="sec-label">02 · 架构</div>
+    <h2>三个平面，一份契约：一切皆为带话轮戳的事件。</h2>
+    <p>Cadence 将关注点分离为媒体平面、对话平面和运维平面。三个平面之间只通过携带单调递增 <code>turn_id</code> 纪元的类型化事件通信 —— 正是这个机制让打断变得无竞态：任何携带过期纪元的事件都会在每个节点被直接丢弃，"抢话之后还蹦出半个字" 在结构上不可能发生。</p>
+
+    <div class="stack">
+      <div class="layer">
+        <div class="name">Media Plane</div>
+        <div class="body">
+          <b>传输适配器与音频 I/O</b>
+          <p>抖动缓冲、重采样、回声消除采集。传输层完全可插拔 —— LiveKit 在这里只是一个适配器，而不是依赖。</p>
+          <div class="chips"><span class="chip u">WebRTC / LiveKit</span><span class="chip u">SIP / 电话线路</span><span class="chip u">WebSocket</span><span class="chip">本地麦克风（开发用）</span></div>
+        </div>
+      </div>
+      <div class="layer">
+        <div class="name">Conversation Plane</div>
+        <div class="body">
+          <b>话轮协调器 + 执行图</b>
+          <p>确定性内核：一个话轮切换状态机，加上一张由处理器（STT、LLM、TTS、工具、护栏、记忆）组成的 DAG，每条边都有背压、优先级和基于纪元的取消能力，外加一个投机执行控制器。</p>
+          <div class="chips"><span class="chip a">话轮状态机</span><span class="chip a">投机执行</span><span class="chip a">延迟预算</span><span class="chip a">纪元取消</span><span class="chip">供应商适配器</span></div>
+        </div>
+      </div>
+      <div class="layer">
+        <div class="name">Operations Plane</div>
+        <div class="body">
+          <b>监督、策略与可观测性</b>
+          <p>会话 Actor 监督、自动扩缩容钩子、OpenTelemetry 链路追踪、事件溯源回放日志，以及策略引擎（PII 脱敏、工具权限、录音同意、租户配额）。</p>
+          <div class="chips"><span class="chip">Actor 监督器</span><span class="chip">回放日志</span><span class="chip">OTel 追踪</span><span class="chip">策略引擎</span><span class="chip">仿真器</span></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>开发者接口保持极简</h3>
+    <pre><code><span class="c"># An agent is a graph + a budget + policies. The runtime owns everything else.</span>
+<span class="k">agent</span> = cadence.Agent(
+    graph = STT(deepgram) >> LLM(gpt, tools=[book_meeting]) >> TTS(elevenlabs),
+    turn_policy  = SemanticEOU(min_silence=<span class="s">240ms</span>, confidence=<span class="s">0.7</span>),
+    budget       = LatencyBudget(first_audio=<span class="s">600ms</span>, fallback=LLM(small_model)),
+    speculation  = Speculate(on=<span class="f">eou.predicted</span>, commit=<span class="f">eou.confirmed</span>),
+    policies     = [RedactPII(), ToolPermissions(scope=<span class="s">"calendar:write"</span>)],
+)
+
+cadence.serve(agent, transport=LiveKitTransport(room), replay=<span class="k">True</span>)</code></pre>
+  </section>
+
+  <!-- ================= 3. TURN COORDINATOR ================= -->
+  <section id="turns">
+    <div class="sec-label">03 · 话轮协调器</div>
+    <h2>话轮切换是一个五状态机，而不是一个 VAD 回调。</h2>
+    <p>协调器将三路信号 —— 声学 VAD、流式 ASR 稳定度、以及一个轻量级语义句尾（EOU）模型 —— 融合为一个掌握话语权的仲裁者。每一次状态迁移都是回放日志中的一个事件，所以"智能体为什么在 00:41 抢了来电者的话？"有精确、可审查的答案。</p>
+
+    <div class="fsm" role="img" aria-label="包含五个状态的状态机：IDLE、LISTENING、DELIBERATING、SPEAKING 和 YIELDING。抢话时，SPEAKING 经由 YIELDING 回到 LISTENING，并取消当前话轮纪元。">
+      <svg viewBox="0 0 960 250" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0L10 5L0 10z" fill="#8A98B8"/>
+          </marker>
+          <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0L10 5L0 10z" fill="#FF7B54"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Mono,monospace" font-size="12" text-anchor="middle">
+          <!-- states -->
+          <g>
+            <rect x="20"  y="100" width="130" height="48" rx="24" fill="none" stroke="#3D4C6E" stroke-width="1.5"/><text x="85"  y="129" fill="#B9C4DB">IDLE</text>
+            <rect x="215" y="100" width="150" height="48" rx="24" fill="none" stroke="#5B8DEF" stroke-width="2"/><text x="290" y="129" fill="#5B8DEF">LISTENING</text>
+            <rect x="430" y="100" width="170" height="48" rx="24" fill="none" stroke="#8AE0B8" stroke-width="1.5"/><text x="515" y="129" fill="#8AE0B8">DELIBERATING</text>
+            <rect x="665" y="100" width="140" height="48" rx="24" fill="none" stroke="#FF7B54" stroke-width="2"/><text x="735" y="129" fill="#FF7B54">SPEAKING</text>
+            <rect x="430" y="190" width="170" height="44" rx="22" fill="none" stroke="#FF7B54" stroke-dasharray="5 4" stroke-width="1.5"/><text x="515" y="217" fill="#FF7B54">YIELDING</text>
+          </g>
+          <!-- forward arrows -->
+          <g stroke="#8A98B8" stroke-width="1.5" fill="none">
+            <line x1="150" y1="124" x2="212" y2="124" marker-end="url(#arr)"/>
+            <line x1="365" y1="124" x2="427" y2="124" marker-end="url(#arr)"/>
+            <line x1="600" y1="124" x2="662" y2="124" marker-end="url(#arr)"/>
+            <path d="M735 100 C735 40 290 40 290 97" marker-end="url(#arr)"/>
+          </g>
+          <!-- barge-in path -->
+          <g stroke="#FF7B54" stroke-width="1.8" fill="none">
+            <path d="M700 148 C660 185 620 205 603 210" marker-end="url(#arrA)"/>
+            <path d="M427 212 C350 205 305 175 293 152" marker-end="url(#arrA)"/>
+          </g>
+          <!-- labels -->
+          <g font-size="10.5" fill="#66748F" text-anchor="start">
+            <text x="152" y="112">vad.start</text>
+            <text x="370" y="112">eou p&gt;.7</text>
+            <text x="604" y="112">commit</text>
+            <text x="470" y="66">agent done / eou.retracted → listen</text>
+            <text x="618" y="192" fill="#FF7B54">barge_in</text>
+            <text x="318" y="188" fill="#FF7B54">flushed&lt;150ms · epoch++</text>
+          </g>
+        </g>
+      </svg>
+      <div class="fsm-note">DELIBERATING（酝酿中）是新颖的一环：执行图已经在投机运行，但没有任何音频被提交。如果用户继续说话，撤回不会付出任何可听见的代价。</div>
+    </div>
+
+    <h3>投机执行，由纪元机制保证安全</h3>
+    <p>当句尾（EOU）概率越过<em>投机</em>阈值（但尚未达到<em>提交</em>阈值）时，运行时就基于部分转写启动 LLM 推理，并预热 TTS。两种结局：</p>
+    <div class="cols">
+      <div class="card g">
+        <span class="k">EOU 确认 · 约 70–80% 的话轮</span>
+        <h4>投机获得回报</h4>
+        <p>首帧音频比严格串行的流水线提前 300–500ms 送出，因为推理与用户的尾部静音重叠进行。</p>
+      </div>
+      <div class="card a">
+        <span class="k">用户继续说话 · 其余情形</span>
+        <h4>撤回零成本</h4>
+        <p>纪元自增；所有携带旧 <code>turn_id</code> 的在途事件在每个节点被丢弃。代价：浪费几个 Token。绝不会有一个错误的字被说出口。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 4. LATENCY ================= -->
+  <section id="latency">
+    <div class="sec-label">04 · 延迟预算</div>
+    <h2>你声明预算，调度器负责花。</h2>
+    <p>开发者不再手工调各处缓冲区大小，而是声明一个端到端目标，例如 <code>first_audio &lt; 600ms</code>。调度器逐话轮跟踪剩余预算并在运行时做决策：收紧端点静音判定、切换到降级模型、在第一个句子边界就启动 TTS、或跳过某个可选的增强步骤。每条链路追踪中都会按阶段归因预算的消耗。</p>
+    <table>
+      <thead><tr><th>阶段</th><th>预算</th><th>实际 P50</th><th>消耗</th><th>超预算时调度器的手段</th></tr></thead>
+      <tbody>
+        <tr><td>端点判定（EOU 决策）</td><td class="num">150ms</td><td class="num">128ms</td><td><div class="bar"><i style="width:22%"></i></div></td><td>降低语义 EOU 阈值；依靠投机执行</td></tr>
+        <tr><td>STT 最终化</td><td class="num">80ms</td><td class="num">64ms</td><td><div class="bar"><i style="width:11%"></i></div></td><td>接受最后一个稳定的部分结果作为最终转写</td></tr>
+        <tr><td>LLM 首 Token</td><td class="num">250ms</td><td class="num">231ms</td><td><div class="bar"><i style="width:39%"></i></div></td><td>路由到降级模型；裁剪上下文窗口</td></tr>
+        <tr><td>TTS 首字节</td><td class="num">120ms</td><td class="num">96ms</td><td><div class="bar"><i style="width:16%"></i></div></td><td>在第一个短句而非第一个完整句上开始合成</td></tr>
+        <tr><td><strong>首帧音频（端到端）</strong></td><td class="num"><strong>600ms</strong></td><td class="num"><strong>519ms</strong></td><td><div class="bar"><i style="width:87%"></i></div></td><td>—</td></tr>
+      </tbody>
+    </table>
+    <p class="dim">由于投机执行让各阶段相互重叠，端到端 P50 可以优于各阶段预算之和 —— 上表数据来自参考执行图的一次 1 万话轮仿真运行。</p>
+  </section>
+
+  <!-- ================= 5. OBSERVABILITY ================= -->
+  <section id="replay">
+    <div class="sec-label">05 · 确定性与可观测性</div>
+    <h2>每一通对话都是一份可以在 CI 里回放的事件日志。</h2>
+    <p>对话平面采用事件溯源：所有决策（状态迁移、投机启动、取消、预算重分配）及其输入都被追加到一份紧凑的日志中 —— 原始音频可选且受策略门控。这一个设计决定，同时买到了当前任何框架都无法兼得的三种能力：</p>
+    <div class="cols">
+      <div class="card u">
+        <span class="k">调试</span>
+        <h4>时间旅行回放</h4>
+        <p>把生产环境的会话日志加载到本地，逐帧单步审视协调器的每个决策。状态机是纯函数，所以回放是比特级精确的。</p>
+      </div>
+      <div class="card a">
+        <span class="k">测试</span>
+        <h4>回归对话集</h4>
+        <p>把真实的抢话事故固化为测试夹具。CI 对每个 PR 回放它们："智能体必须在夹具 #23 上于 150ms 内让出话语权" 是一条断言，而不是一个愿望。</p>
+      </div>
+      <div class="card g">
+        <span class="k">压测</span>
+        <h4>合成会话仿真器</h4>
+        <p>在任何真人和智能体对话之前，先跑几千个脚本化的模拟来电者 —— 丢包、词中打断、慢工具、供应商 500 错误。</p>
+      </div>
+    </div>
+    <p style="margin-top:22px">链路追踪采用标准 <strong>OpenTelemetry</strong>：每个话轮一个 Span，每个阶段一个子 Span，并附带预算归因 —— 你现有技术栈里的延迟看板可以直接使用。</p>
+  </section>
+
+  <!-- ================= 6. POLICY ================= -->
+  <section id="policy">
+    <div class="sec-label">06 · 策略平面</div>
+    <h2>合规是配置项，而不是代码评审。</h2>
+    <p>语音智能体会落地在强监管场景 —— 电话、医疗、金融。Cadence 将各团队原本各自重复造轮子的管控能力集中起来：转写离开会话 Actor 之前的流式 <strong>PII 脱敏</strong>、调用时校验的<strong>工具权限范围</strong>、作用于回放日志的<strong>录音同意</strong>门控、按租户的<strong>速率与费用配额</strong>，以及供应商路由的<strong>数据驻留</strong>锁定。策略是声明式的、有版本的，并在对话平面内部求值，因此对每一张执行图统一生效。</p>
+  </section>
+
+  <!-- ================= 7. POSITIONING ================= -->
+  <section id="positioning">
+    <div class="sec-label">07 · 定位</div>
+    <h2>与巨人互补；占住他们都留空的那一层。</h2>
+    <table class="vs">
+      <thead><tr><th>能力</th><th>LiveKit Agents</th><th>Pipecat</th><th class="us">Cadence</th></tr></thead>
+      <tbody>
+        <tr><td>WebRTC 媒体基础设施</td><td><span class="tick">●●●</span></td><td><span class="dash">经由 Daily</span></td><td class="us"><span class="dash">适配器（复用 LiveKit）</span></td></tr>
+        <tr><td>类型化帧/事件流水线</td><td><span class="dash">部分支持</span></td><td><span class="tick">●●●</span></td><td class="us"><span class="tick">●●● + 话轮纪元</span></td></tr>
+        <tr><td>话轮切换作为可测试状态机</td><td><span class="dash">内部实现</span></td><td><span class="dash">内部实现</span></td><td class="us"><span class="tick">一等公民、可回放</span></td></tr>
+        <tr><td>可安全撤回的投机执行</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td class="us"><span class="tick">核心原语</span></td></tr>
+        <tr><td>声明式延迟预算</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td class="us"><span class="tick">核心原语</span></td></tr>
+        <tr><td>CI 中的确定性会话回放</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td class="us"><span class="tick">事件溯源内核</span></td></tr>
+        <tr><td>策略平面（PII、同意、配额）</td><td><span class="dash">云端功能</span></td><td><span class="dash">依赖生态</span></td><td class="us"><span class="tick">内置、开源</span></td></tr>
+      </tbody>
+    </table>
+    <p class="dim">战略提示：不要自建 SFU，第一年也不要在供应商插件数量上比拼。与两大生态互操作 —— Cadence 的执行图应能包装 Pipecat 的处理器、也能部署在 LiveKit 基础设施之上 —— 把他们的社区变成你的分发渠道。</p>
+  </section>
+
+  <!-- ================= 8. ROADMAP ================= -->
+  <section id="roadmap">
+    <div class="sec-label">08 · 路线图</div>
+    <h2>三个版本，抵达生产级公信力。</h2>
+    <div class="phases">
+      <div class="phase">
+        <div class="ph-t">阶段 1 · 第 1–8 周 · "能对话"</div>
+        <h4>确定性内核</h4>
+        <ul>
+          <li>Python 运行时：类型化事件、话轮纪元、带背压与取消能力的执行图</li>
+          <li>五状态话轮协调器（VAD + ASR 稳定度 + 语义 EOU）</li>
+          <li>WebSocket + 本地麦克风传输；STT/LLM/TTS 各接入 2 家供应商</li>
+          <li>事件日志 + 离线回放 CLI，从第一天就有</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="ph-t">阶段 2 · 第 9–18 周 · "跑得快"</div>
+        <h4>投机与预算</h4>
+        <ul>
+          <li>带提交/撤回的投机执行；带降级路由的延迟预算调度器</li>
+          <li>LiveKit + SIP 传输适配器；会话 Actor 监督</li>
+          <li>带按阶段预算归因的 OpenTelemetry Span</li>
+          <li>基准测试 CLI：发布可复现的首帧音频延迟数据并与基线对比</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="ph-t">阶段 3 · 第 19–30 周 · "可上线"</div>
+        <h4>运维与信任</h4>
+        <ul>
+          <li>合成来电者仿真器（丢包、抢话风暴、供应商混沌注入）</li>
+          <li>策略平面：PII 脱敏、工具权限范围、同意门控、租户配额</li>
+          <li>回放夹具回归套件，作为公开的一致性基准</li>
+          <li>参考部署：Helm Chart、扩缩容指南、1.0 稳定性承诺</li>
+        </ul>
+      </div>
+    </div>
+    <h3>从第一周就要度量的指标</h3>
+    <p class="dim">首帧音频 P50/P95 · 抢话让出时间 P95（&lt;150ms）· 投机命中率 · Token 浪费率 · 单核会话数 · 回放确定性（100%）。这六个数字是项目的公开记分牌 —— 每次发版都写进 README。</p>
+  </section>
+
+  <!-- ================= 9. COGNITION LAYER ================= -->
+  <section id="cognition">
+    <div class="sec-label">09 · 认知层</div>
+    <h2>两个大脑，一个声音：快速应答者在前，后台思考者在后。</h2>
+    <p>单一模型无法既即时又深刻。认知层把智能体拆成一个 <strong>Responder（应答者）</strong> —— 掌握话语权的小型快速对话模型，和一个 <strong>Thinker（思考者）</strong> —— 异步处理工具、RAG 和多步规划的大型推理模型。这个模式已被生产环境验证：OpenAI 的 Realtime 系列用一个 mini 语音模型搭配被委派的推理模型，Salesforce 的 VoiceAgentRAG 则将其形式化为 "Fast Talker / Slow Thinker"，实现了 75% 的预取命中率和缓存命中时 316 倍的检索加速。</p>
+
+    <!-- cognition dataflow diagram -->
+    <div class="scope" role="img" aria-label="数据流示意图：用户音频经 STT 进入 Responder，Responder 通过 TTS 发声。Responder 读写共享黑板。Thinker 持续读取转写文本，将事实预取进黑板，并在后台执行被委派的任务。">
+      <div class="scope-head">
+        <span class="t">Cognition dataflow · responder / blackboard / thinker</span>
+        <span class="legend">
+          <span><i style="background:var(--user)"></i>FOREGROUND</span>
+          <span><i style="background:var(--agent)"></i>BACKGROUND</span>
+          <span><i style="background:#3D4C6E"></i>SHARED STATE</span>
+        </span>
+      </div>
+      <svg viewBox="0 0 960 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <marker id="arrC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0L10 5L0 10z" fill="#8A98B8"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Mono,monospace" font-size="12" text-anchor="middle">
+          <!-- foreground lane -->
+          <text x="480" y="28" fill="#5B8DEF" font-size="10.5" letter-spacing="2">FOREGROUND · &lt;500ms LOOP</text>
+          <rect x="30" y="45" width="120" height="46" rx="23" fill="none" stroke="#5B8DEF" stroke-width="1.5"/><text x="90" y="73" fill="#B9C4DB">USER / STT</text>
+          <rect x="330" y="45" width="180" height="46" rx="23" fill="none" stroke="#5B8DEF" stroke-width="2"/><text x="420" y="66" fill="#5B8DEF">RESPONDER</text><text x="420" y="82" fill="#66748F" font-size="9.5">small · fast · voices all</text>
+          <rect x="700" y="45" width="130" height="46" rx="23" fill="none" stroke="#5B8DEF" stroke-width="1.5"/><text x="765" y="73" fill="#B9C4DB">TTS / USER</text>
+          <!-- blackboard -->
+          <rect x="280" y="130" width="400" height="60" rx="8" fill="#16203A" stroke="#3D4C6E" stroke-width="1.5"/>
+          <text x="480" y="153" fill="#B9C4DB">BLACKBOARD</text>
+          <text x="480" y="172" fill="#66748F" font-size="9.5">facts (cache+TTL) · pending_tasks · spoken_claims · conclusions · turn_id</text>
+          <!-- background lane -->
+          <text x="480" y="292" fill="#FF7B54" font-size="10.5" letter-spacing="2">BACKGROUND · SECONDS-SCALE</text>
+          <rect x="330" y="215" width="180" height="46" rx="23" fill="none" stroke="#FF7B54" stroke-width="2"/><text x="420" y="236" fill="#FF7B54">THINKER</text><text x="420" y="252" fill="#66748F" font-size="9.5">big model · tools · RAG</text>
+          <rect x="640" y="215" width="180" height="46" rx="23" fill="none" stroke="#FF7B54" stroke-dasharray="5 4" stroke-width="1.5"/><text x="730" y="236" fill="#FFB38A">TOOLS / RAG / APIs</text><text x="730" y="252" fill="#66748F" font-size="9.5">effectful ops gated</text>
+          <!-- arrows -->
+          <g stroke="#8A98B8" stroke-width="1.5" fill="none">
+            <line x1="150" y1="68" x2="327" y2="68" marker-end="url(#arrC)"/>
+            <line x1="510" y1="68" x2="697" y2="68" marker-end="url(#arrC)"/>
+            <line x1="390" y1="91" x2="390" y2="127" marker-end="url(#arrC)"/>
+            <line x1="450" y1="127" x2="450" y2="91" marker-end="url(#arrC)"/>
+            <line x1="420" y1="212" x2="420" y2="193" marker-end="url(#arrC)"/>
+            <line x1="480" y1="193" x2="480" y2="212" marker-end="url(#arrC)"/>
+            <line x1="510" y1="238" x2="637" y2="238" marker-end="url(#arrC)"/>
+          </g>
+          <!-- transcript tap -->
+          <path d="M90 91 C90 238 200 238 327 238" stroke="#FF7B54" stroke-width="1.5" fill="none" stroke-dasharray="6 5" marker-end="url(#arrC)"/>
+          <g font-size="9.5" fill="#66748F" text-anchor="start">
+            <text x="356" y="112">read/write</text>
+            <text x="488" y="207">prefetch + results</text>
+            <text x="120" y="180" fill="#FF7B54">live transcript tap → predictive pre-thinking</text>
+          </g>
+        </g>
+      </svg>
+      <div class="scope-caption">Thinker 从不发声，Responder 从不检索。二者只在<em>黑板（blackboard）</em>相遇 —— 一份有版本、带话轮纪元戳的会话状态。因为每条记录都携带 <em>turn_id</em>，一次抢话就能用取消过期音频的同一套纪元机制，把过期的思考一并作废。</div>
+    </div>
+
+    <h3>缓存优先，而非委派优先</h3>
+    <p>按需委派是兜底路径，不是主路径。Thinker 持续读取实时转写，预测接下来最可能出现的两三个信息需求，并在用户话音未落之前就把答案预取进黑板的语义缓存。大多数话轮里，Responder 用手头已有的状态即可作答 —— 只有缓存未命中时才发生委派。</p>
+
+    <table>
+      <thead><tr><th>层级</th><th>路径</th><th>延迟</th><th>处理内容</th></tr></thead>
+      <tbody>
+        <tr><td><strong>T0 · 反射</strong></td><td>仅 Responder</td><td class="num">&lt;300ms</td><td>应答确认、寒暄、复述确认、话轮管理</td></tr>
+        <tr><td><strong>T1 · 缓存命中</strong></td><td>Responder + 黑板读取</td><td class="num">&lt;500ms</td><td>Thinker 已预取的事实 —— 常态情形（目标命中率 ≥70%）</td></tr>
+        <tr><td><strong>T2 · 延迟应答</strong></td><td>委派 → 时间桥接 → 重新切入</td><td class="num">1–10s</td><td>缓存未命中、有副作用的工具、全新的多步推理</td></tr>
+      </tbody>
+    </table>
+
+    <h3>委派契约</h3>
+    <p>Responder 输出的是结构化意图，绝不是寄希望于自由文本。路由由运行时完成 —— 而不是模型。一份硬性黑名单定义了 Responder 绝不允许凭自身权重回答的内容：价格、条款、账户事实、医疗论断。这些要么带着出处从黑板取得，要么被委派出去。</p>
+
+    <pre><code><span class="c"># Responder output is constrained: speak, delegate, or both.</span>
+<span class="k">class</span> ResponderTurn:
+    utterance: <span class="f">str</span>                      <span class="c"># what to say now (may be a bridge)</span>
+    delegations: list[<span class="f">Delegate</span>]        <span class="c"># tasks for the Thinker</span>
+
+<span class="k">class</span> Delegate:
+    kind: <span class="s">"rag" | "tool" | "reason"</span>
+    query: <span class="f">str</span>
+    urgency: <span class="s">"blocking" | "background"</span>
+    effectful: <span class="f">bool</span>                    <span class="c"># True → requires confirm gate before execution</span>
+
+<span class="c"># Thinker output is structured — it never produces prose for the user.</span>
+<span class="k">class</span> Conclusion:
+    task_id: <span class="f">str</span>
+    turn_id: <span class="f">int</span>                       <span class="c"># stale epochs dropped on arrival</span>
+    answer: <span class="f">dict</span>                       <span class="c"># structured facts + provenance</span>
+    speakable: <span class="f">str</span>                     <span class="c"># one-line summary the Responder may voice</span>
+    confidence: <span class="f">float</span></code></pre>
+
+    <h3>时间桥接：Thinker 工作时，用户听到什么</h3>
+    <div class="cols">
+      <div class="card u">
+        <span class="k">剩余 &lt; 800ms</span>
+        <h4>静默</h4>
+        <p>一个自然的停顿。不加填充语 —— 人类不会给亚秒级的等待配旁白，智能体也不该。</p>
+      </div>
+      <div class="card a">
+        <span class="k">0.8 – 3s</span>
+        <h4>情境化应答</h4>
+        <p>"我帮您调一下订单" —— 从一个多样化、随上下文变化的语料集中采样，绝不循环播放同一句套话。流式返回的部分事实可以边到边说。</p>
+      </div>
+      <div class="card g">
+        <span class="k">&gt; 3s</span>
+        <h4>并行话题 + 重新切入</h4>
+        <p>Responder 在另一条有用的线索上推进对话（核对信息、收集下一个槽位），等结论落地后再切回来："好——关于那笔退款……"。填充语预算：两次，之后就坦诚说明延迟。</p>
+      </div>
+    </div>
+
+    <h3>一致性规则</h3>
+    <p>异步结果在对话中途到达，会产生两类必须由运行时兜住的风险：</p>
+    <div class="cols">
+      <div class="card a">
+        <span class="k">风险 1 · 前后矛盾</span>
+        <h4>已说断言审计</h4>
+        <p>Responder 说出的每一条事实性话语都会记入 <code>spoken_claims</code>。当 Thinker 的结论与先前断言相矛盾时，运行时会标记冲突，Responder 必须在下一话轮口头更正 —— 让编造被抓住，而不是被掩埋。</p>
+      </div>
+      <div class="card u">
+        <span class="k">风险 2 · 过期工作</span>
+        <h4>纪元作用域任务</h4>
+        <p>Thinker 的任务携带其诞生时的 <code>turn_id</code>。抢话或话题切换时，纯任务（RAG 查询）被取消或降级为后台事实；<strong>有副作用的任务绝不自动取消</strong> —— 副作用只有在显式确认门之后才会执行。</p>
+      </div>
+    </div>
+
+    <h3>需要度量的指标</h3>
+    <p class="dim">缓存命中率（目标 ≥70%）· T0/T1/T2 话轮分布 · 桥接到结论的延迟 P95 · 更正率（每 100 话轮的矛盾次数）· 预取浪费率。这些指标并入 §08 的运行时记分牌。</p>
+    <p class="dim">先例参考：OpenAI gpt-realtime + 推理模型委派（<a href="https://developers.openai.com/api/docs/guides/realtime">Realtime 指南</a>）· Salesforce VoiceAgentRAG，arXiv:2603.02206（<a href="https://github.com/SalesforceAIResearch/VoiceAgentRAG">开源实现</a>）· System 1 / System 2 级联（ElevenLabs、Coval 工程博客）。</p>
+  </section>
+
+  <footer>
+    <span>CADENCE_RUNTIME · 设计规格书 v0.1 · 为 awesome-voiceagent 计划撰写</span>
+    <span>参考：livekit/agents · pipecat-ai/pipecat</span>
+  </footer>
+</div>
+</body>
+</html>
